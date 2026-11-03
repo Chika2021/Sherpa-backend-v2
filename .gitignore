@@ -10,3 +10,5 @@ dist/
 .env
 node_modules/
 dist/
+*.tsbuildinfo
+dist
