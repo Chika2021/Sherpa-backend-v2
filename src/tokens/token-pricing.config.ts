@@ -163,6 +163,7 @@ export const FEATURE_TOKEN_COSTS: Record<string, number> = {
   generateLabExercises: 1,
   evaluateLabAttempt: 1,
   mapApplicationForm: 1,
+  generateApplicationEmail: 1, // apply by email: the cover email itself (the resume + cover letter are billed as their own two generations)
   answerApplicationForm: 1, // guided apply: answers every question of a pasted form / link in one call
   askAi: 1,
   // AI Workshop (internship-style practical training on a skill). Each is one token:

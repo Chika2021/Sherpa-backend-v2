@@ -18,6 +18,19 @@ import * as nodemailer from 'nodemailer';
  *   MAIL_FROM_NAME                optional display name (default "Sherpar")
  *   BREVO_API_KEY | RESEND_API_KEY
  */
+/** An application email: plain-text body, the applicant as Reply-To, resume / cover letter attached. */
+export interface ApplicationMail {
+  to: string;
+  subject: string;
+  text: string;
+  applicantName: string;
+  /** The applicant's own address: replies from the employer go here. */
+  replyTo: string;
+  /** Optional hidden copy to the applicant, so they keep a record of exactly what was sent. */
+  bcc?: string;
+  attachments: Array<{ filename: string; content: Buffer; mimeType: string }>;
+}
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -103,6 +116,83 @@ If you didn't request this, you can safely ignore this email.`;
     } catch (err) {
       this.logger.error(`Email "${subject}" to ${to} failed: ${(err as Error).message}`);
     }
+  }
+
+  /** True when a real provider is configured (otherwise `send` only logs, which must never count as "sent"). */
+  canDeliver(): boolean {
+    return this.providerName() !== 'none';
+  }
+
+  /**
+   * Sends a job-application email with the resume / cover letter attached. Unlike `sendNotification` this
+   * THROWS on failure and refuses to "send" when no provider is configured, because the caller reports the
+   * outcome to the user and a silent log-only send would be a lie. The message goes out from the app's
+   * verified sender address, shown as "<Applicant> via <app>", with Reply-To set to the applicant.
+   */
+  async sendApplicationEmail(msg: ApplicationMail): Promise<void> {
+    if (!this.canDeliver()) {
+      throw new Error('No mail provider is configured on this server.');
+    }
+    const clean = (v: string) => v.replace(/[\r\n"<>]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const fromName = clean(`${msg.applicantName} via ${this.fromName}`).slice(0, 120) || this.fromName;
+    const subject = clean(msg.subject).slice(0, 200);
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const html = msg.text
+      .split(/\n{2,}/)
+      .map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`)
+      .join('');
+    const full = { ...msg, applicantName: clean(msg.applicantName) || 'Applicant', subject, fromName, html };
+
+    if (this.brevoKey) return this.sendApplicationViaBrevo(full);
+    if (this.resendKey) return this.sendApplicationViaResend(full);
+    await this.transporter!.sendMail({
+      from: `"${fromName}" <${this.fromEmail}>`,
+      to: msg.to,
+      bcc: msg.bcc,
+      replyTo: `"${clean(msg.applicantName)}" <${msg.replyTo}>`,
+      subject,
+      text: msg.text,
+      html,
+      attachments: msg.attachments.map((a) => ({ filename: a.filename, content: a.content, contentType: a.mimeType })),
+    });
+  }
+
+  private async sendApplicationViaBrevo(m: ApplicationMail & { fromName: string; html: string }) {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': this.brevoKey!, 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({
+        sender: { email: this.fromEmail, name: m.fromName },
+        to: [{ email: m.to }],
+        ...(m.bcc ? { bcc: [{ email: m.bcc }] } : {}),
+        replyTo: { email: m.replyTo, name: m.applicantName },
+        subject: m.subject,
+        htmlContent: m.html,
+        textContent: m.text,
+        attachment: m.attachments.map((a) => ({ name: a.filename, content: a.content.toString('base64') })),
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw new Error(`Brevo API ${res.status}: ${await res.text()}`);
+  }
+
+  private async sendApplicationViaResend(m: ApplicationMail & { fromName: string; html: string }) {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.resendKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from: `${m.fromName} <${this.fromEmail}>`,
+        to: [m.to],
+        ...(m.bcc ? { bcc: [m.bcc] } : {}),
+        reply_to: m.replyTo,
+        subject: m.subject,
+        html: m.html,
+        text: m.text,
+        attachments: m.attachments.map((a) => ({ filename: a.filename, content: a.content.toString('base64') })),
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw new Error(`Resend API ${res.status}: ${await res.text()}`);
   }
 
   /** Which provider will actually deliver mail (for the admin dashboard). */

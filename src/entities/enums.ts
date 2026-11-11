@@ -35,3 +35,7 @@ export const AUTO_APPLY_STATUSES = [
   'CANCELLED',
 ] as const;
 export type AutoApplyStatus = (typeof AUTO_APPLY_STATUSES)[number];
+
+// Apply-by-email: the draft is edited, then sent from the user's review. Nothing is ever sent without an explicit send call.
+export const EMAIL_APPLICATION_STATUSES = ['DRAFT', 'SENDING', 'SENT', 'FAILED'] as const;
+export type EmailApplicationStatus = (typeof EMAIL_APPLICATION_STATUSES)[number];

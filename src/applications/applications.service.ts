@@ -14,6 +14,7 @@ import { GenerateForJobDto } from './dto/generate-for-job.dto';
 import { RecordResultDto } from './dto/record-result.dto';
 import { Application } from '../entities/application.entity';
 import { Job } from '../entities/job.entity';
+import { EmailApplication } from '../entities/email-application.entity';
 import { GeneratedDocument } from '../entities/generated-document.entity';
 import { ApplicationStatus } from '../entities/enums';
 import { assertValidId, ownedBy } from '../database/db-utils';
@@ -40,6 +41,7 @@ export class ApplicationsService {
     @InjectRepository(Application) private applications: Repository<Application>,
     @InjectRepository(Job) private jobs: Repository<Job>,
     @InjectRepository(GeneratedDocument) private documents: Repository<GeneratedDocument>,
+    @InjectRepository(EmailApplication) private emailApplications: Repository<EmailApplication>,
     private resumesService: ResumesService,
     private documentsService: DocumentsService,
     private submitterRegistry: SubmitterRegistry,
@@ -373,7 +375,9 @@ export class ApplicationsService {
     const documents = await this.getDocumentsFor(applicationId);
     const json: Record<string, any> = application.toJSON();
     if (json.user) json.user = stripUserSecrets(json.user);
-    return { ...json, documents: documents.map((d) => d.toJSON()) };
+    // Present only for applications made by email (see applications/email).
+    const email = await this.emailApplications.findOneBy({ applicationId });
+    return { ...json, documents: documents.map((d) => d.toJSON()), ...(email ? { emailApplication: email.toJSON() } : {}) };
   }
 
   /** Used by the controller - same as getOwned but with generated documents attached. */
@@ -404,6 +408,19 @@ export class ApplicationsService {
       docsByApplication.set(key, bucket);
     }
 
-    return applications.map((a) => ({ ...a.toJSON(), documents: docsByApplication.get(a.id) || [] }));
+    const emails = await this.emailApplications.find({ where: { applicationId: In(applications.map((a) => a.id)) } });
+    const emailByApplication = new Map(emails.map((e) => [e.applicationId, e]));
+
+    return applications.map((a) => {
+      const email = emailByApplication.get(a.id);
+      return {
+        ...a.toJSON(),
+        documents: docsByApplication.get(a.id) || [],
+        // Only for applications made by email: lets the list show "emailed to x" / "draft" without another request.
+        ...(email
+          ? { emailApplication: { recipientEmail: email.recipientEmail ?? null, subject: email.subject, status: email.status, sentAt: email.sentAt ?? null } }
+          : {}),
+      };
+    });
   }
 }

@@ -13,11 +13,14 @@ import { AssistedApplyController } from './assisted/assisted-apply.controller';
 import { GuidedApplyService } from './guided/guided-apply.service';
 import { GuidedApplyController } from './guided/guided-apply.controller';
 import { FormLinkReader } from './guided/form-link-reader.service';
+import { EmailApplyService } from './email/email-apply.service';
+import { EmailApplyController } from './email/email-apply.controller';
 
 @Module({
   imports: [ResumesModule, DocumentsModule, CredentialsModule, EntitiesModule, AiModule],
-  providers: [ApplicationsService, GenericFormAdapter, SubmitterRegistry, AssistedApplyService, GuidedApplyService, FormLinkReader],
-  controllers: [ApplicationsController, AssistedApplyController, GuidedApplyController],
+  providers: [ApplicationsService, GenericFormAdapter, SubmitterRegistry, AssistedApplyService, GuidedApplyService, FormLinkReader, EmailApplyService],
+  // EmailApplyController first: its fixed `applications/email` prefix must win over ApplicationsController's `:id` routes.
+  controllers: [EmailApplyController, ApplicationsController, AssistedApplyController, GuidedApplyController],
   exports: [ApplicationsService, SubmitterRegistry],
 })
 export class ApplicationsModule {}
