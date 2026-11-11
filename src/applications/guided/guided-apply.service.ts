@@ -81,7 +81,7 @@ export class GuidedApplyService {
       }),
     );
     const app = await this.applications.save(
-      this.applications.create({ userId, jobId: job.id, resumeId: resume.id, status: 'PENDING', appliedUrl: applyUrl }),
+      this.applications.create({ userId, jobId: job.id, resumeId: resume.id, status: 'PENDING', appliedUrl: applyUrl, draftFormText: dto.formText?.trim() || null }),
     );
     return this.applicationsService.getOwnedForResponse(userId, app.id);
   }
@@ -106,10 +106,12 @@ export class GuidedApplyService {
       }
       await this.jobs.update({ id: job.id }, patch as any);
     }
+    const appPatch: Partial<Application> = {};
     if (dto.applyUrl !== undefined) {
-      const url = dto.applyUrl.trim() ? await assertPublicHttpUrl(dto.applyUrl) : null;
-      await this.applications.update({ id }, { appliedUrl: url });
+      appPatch.appliedUrl = dto.applyUrl.trim() ? await assertPublicHttpUrl(dto.applyUrl) : null;
     }
+    if (dto.formText !== undefined) appPatch.draftFormText = dto.formText.trim() || null;
+    if (Object.keys(appPatch).length) await this.applications.update({ id }, appPatch as any);
     return this.applicationsService.getOwnedForResponse(userId, id);
   }
 
@@ -164,7 +166,10 @@ export class GuidedApplyService {
       throw new BadRequestException("Couldn't find any questions in that form. Make sure you copied the fields, not just the page title.");
     }
 
-    await this.applications.update({ id }, { guidedAnswers: answers as any });
+    await this.applications.update(
+      { id },
+      { guidedAnswers: answers as any, ...(formText ? { draftFormText: formText.slice(0, 30000) } : {}) } as any,
+    );
     return {
       source,
       via: read?.via,

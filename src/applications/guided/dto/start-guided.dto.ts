@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
 
 /**
  * Starts a guided application. Every field is optional: the user can give as much or as
@@ -21,6 +21,9 @@ export class StartGuidedDto {
   @IsUrl({ protocols: ['http', 'https'], require_protocol: false })
   applyUrl?: string;
 
+  // The pasted application form, saved as a draft so the user can come back to it.
+  @IsOptional() @IsString() @MaxLength(30000) formText?: string;
+
   @IsOptional() @IsString() resumeId?: string; // defaults to the primary resume
 }
 
@@ -30,9 +33,15 @@ export class UpdateGuidedDetailsDto {
   @IsOptional() @IsString() @MaxLength(200) company?: string;
   @IsOptional() @IsString() @MaxLength(20000) jobDescription?: string;
   @IsOptional() @IsString() @MaxLength(10000) requirements?: string;
+
+  // "" clears the saved link, so the URL check only applies to a non-empty value.
   @IsOptional()
+  @ValidateIf((o) => o.applyUrl !== '')
   @IsString()
   @MaxLength(2048)
   @IsUrl({ protocols: ['http', 'https'], require_protocol: false })
   applyUrl?: string;
+
+  // The pasted application form, saved as a draft ("" clears it).
+  @IsOptional() @IsString() @MaxLength(30000) formText?: string;
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ApplicationsService } from './applications.service';
@@ -53,5 +53,18 @@ export class ApplicationsController {
   @Post(':id/apply')
   apply(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.applicationsService.generateAndSubmit(userId, id);
+  }
+
+  // Delete EVERY application of the current user. Needs ?confirm=yes so a stray call can't wipe the list.
+  // Declared before ':id' so "all" is never treated as an id.
+  @Delete()
+  removeAll(@CurrentUser('id') userId: string, @Query('confirm') confirm?: string) {
+    if (confirm !== 'yes') throw new BadRequestException('Add ?confirm=yes to delete all applications.');
+    return this.applicationsService.deleteAll(userId);
+  }
+
+  @Delete(':id')
+  remove(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.applicationsService.deleteOne(userId, id);
   }
 }

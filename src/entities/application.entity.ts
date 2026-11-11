@@ -10,7 +10,7 @@ import { ApplicationStatus } from './enums';
 @Index(['userId', 'jobId'], { unique: true })
 export class Application extends SerializableEntity {
   // Columns the API has always returned as an explicit `null` when empty.
-  static readonly keepNull = ['appliedUrl', 'feedback', 'submittedAt', 'guidedAnswers'];
+  static readonly keepNull = ['appliedUrl', 'feedback', 'submittedAt', 'guidedAnswers', 'draftFormText'];
 
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -38,6 +38,9 @@ export class Application extends SerializableEntity {
 
   // Guided apply: the answers generated for the pasted form / link, kept so the
   // user can come back and copy them later. Shape: GuidedAnswer[] (see guided-apply.service.ts).
+  // Guided apply: the form text the user pasted but hasn't generated answers for yet (a saved draft).
+  @Column({ type: 'text', nullable: true, default: null }) draftFormText?: string | null;
+
   @Column({ type: 'jsonb', nullable: true, default: null }) guidedAnswers?: Array<Record<string, any>> | null;
 
   @Column({ type: 'text', nullable: true, default: null }) feedback?: string | null;

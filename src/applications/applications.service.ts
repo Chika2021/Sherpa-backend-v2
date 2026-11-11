@@ -1,4 +1,7 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { unlink } from 'fs/promises';
+import { resolve, sep } from 'path';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
@@ -41,6 +44,7 @@ export class ApplicationsService {
     private documentsService: DocumentsService,
     private submitterRegistry: SubmitterRegistry,
     private credentialsService: CredentialsService,
+    private config: ConfigService,
   ) {}
 
   async create(userId: string, dto: CreateApplicationDto, autoApplyBatchId?: string) {
@@ -280,6 +284,57 @@ export class ApplicationsService {
       submittedAt: dto.outcome === 'SUBMITTED' ? new Date() : null,
     });
     return this.attachDocuments(application, applicationId);
+  }
+
+
+  // ---------------------------------------------------------------- deleting
+
+  /** Statuses where a background job is still writing to the application - deleting then would race it. */
+  private static readonly IN_FLIGHT: ApplicationStatus[] = ['GENERATING', 'SUBMITTING'];
+
+  /** Deletes one application with its generated documents (rows and files) and, if the user typed the job in themselves, that job too. */
+  async deleteOne(userId: string, applicationId: string) {
+    const application = await this.getOwned(userId, applicationId);
+    if (ApplicationsService.IN_FLIGHT.includes(application.status)) {
+      throw new ConflictException('This application is still being worked on. Try again in a moment.');
+    }
+    await this.removeMany(userId, [application]);
+    return { deleted: 1 };
+  }
+
+  /** Deletes all of the user's applications, except any that are being worked on right now (reported as `skipped`). */
+  async deleteAll(userId: string) {
+    assertValidId(userId, 'User');
+    const all = await this.applications.find({ where: { userId }, relations: { job: true } });
+    const deletable = all.filter((a) => !ApplicationsService.IN_FLIGHT.includes(a.status));
+    await this.removeMany(userId, deletable);
+    return { deleted: deletable.length, skipped: all.length - deletable.length };
+  }
+
+  private async removeMany(userId: string, apps: Application[]) {
+    if (!apps.length) return;
+    const ids = apps.map((a) => a.id);
+    const docs = await this.documents.find({ where: { applicationId: In(ids) } });
+
+    await this.documents.delete({ applicationId: In(ids) });
+    await this.applications.delete({ id: In(ids), userId });
+
+    // Jobs the user typed in themselves (guided / quick flows) exist only for their application - tidy them up.
+    // Jobs from search are shared between users and are never touched.
+    const manualJobIds = [...new Set(apps.filter((a) => a.job?.source === 'manual').map((a) => a.jobId))];
+    if (manualJobIds.length) {
+      await this.jobs.delete({ id: In(manualJobIds), source: 'manual' }).catch((err) => this.logger.warn(`Could not remove manual jobs: ${err}`));
+    }
+
+    // Generated files last, best effort: a missing file must never fail the delete.
+    const root = resolve(this.config.get<string>('GENERATED_DIR') || './generated');
+    await Promise.all(
+      docs.map(async (d) => {
+        const full = resolve(d.filePath);
+        if (!full.startsWith(root + sep)) return; // only ever delete inside the generated folder
+        await unlink(full).catch(() => undefined);
+      }),
+    );
   }
 
   private buildFeedback(title: string, company: string | null, applyUrl: string, result: any) {
