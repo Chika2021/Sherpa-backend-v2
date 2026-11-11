@@ -10,11 +10,14 @@ import { EntitiesModule } from '../entities/entities.module';
 import { AiModule } from '../ai/ai.module';
 import { AssistedApplyService } from './assisted/assisted-apply.service';
 import { AssistedApplyController } from './assisted/assisted-apply.controller';
+import { GuidedApplyService } from './guided/guided-apply.service';
+import { GuidedApplyController } from './guided/guided-apply.controller';
+import { FormLinkReader } from './guided/form-link-reader.service';
 
 @Module({
   imports: [ResumesModule, DocumentsModule, CredentialsModule, EntitiesModule, AiModule],
-  providers: [ApplicationsService, GenericFormAdapter, SubmitterRegistry, AssistedApplyService],
-  controllers: [ApplicationsController, AssistedApplyController],
+  providers: [ApplicationsService, GenericFormAdapter, SubmitterRegistry, AssistedApplyService, GuidedApplyService, FormLinkReader],
+  controllers: [ApplicationsController, AssistedApplyController, GuidedApplyController],
   exports: [ApplicationsService, SubmitterRegistry],
 })
 export class ApplicationsModule {}

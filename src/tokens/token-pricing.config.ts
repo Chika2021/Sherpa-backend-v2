@@ -162,6 +162,7 @@ export const FEATURE_TOKEN_COSTS: Record<string, number> = {
   generateLabExercises: 1,
   evaluateLabAttempt: 1,
   mapApplicationForm: 1,
+  answerApplicationForm: 1, // guided apply: answers every question of a pasted form / link in one call
   askAi: 1,
   // AI Workshop (internship-style practical training on a skill). Each is one token:
   generateWorkshopPlan: 1, // once per workshop: the outline of every level and project

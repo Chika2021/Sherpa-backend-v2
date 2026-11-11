@@ -63,7 +63,7 @@ const LIVE: AssistedStatus[] = ['PREPARING', 'READY_FOR_REVIEW', 'SUBMITTING'];
  * themselves - a wrong or invented answer can disqualify them or amount to a
  * false declaration.
  */
-const SENSITIVE_LABEL =
+export const SENSITIVE_LABEL =
   /gender|\bsex\b|\brace\b|ethnic|veteran|disabilit|sponsor|authori[sz]ed to work|work authori[sz]ation|right to work|\bvisa\b|citizen|criminal|convict|felony|salary|compensation|pay expect|date of birth|\bdob\b|social security|\bssn\b|national id|signature|\bi (agree|certify|consent|acknowledge|declare|confirm)\b|\bterms\b|privacy|notice period|start date|available to start|\breferences?\b/i;
 
 interface Session {

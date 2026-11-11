@@ -25,6 +25,11 @@ import { AudioModule } from './audio/audio.module';
 import { JobSourceSettingsModule } from './job-sources/job-source-settings.module';
 import { AiTrainingJobsModule } from './ai-training-jobs/ai-training-jobs.module';
 import { HealthModule } from './health/health.module';
+import { RealtimeModule } from './realtime/realtime.module';
+import { AdminModule } from './admin/admin.module';
+import { SupportModule } from './support/support.module';
+import { ChatbotModule } from './chatbot/chatbot.module';
+import { TesterModule } from './tester/tester.module';
 
 @Module({
   imports: [
@@ -35,10 +40,16 @@ import { HealthModule } from './health/health.module';
         port: Number(process.env.REDIS_PORT) || 6379,
       },
     }),
-    ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), process.env.GENERATED_DIR || 'generated'),
-      serveRoot: '/files',
-    }),
+    ServeStaticModule.forRoot(
+      {
+        rootPath: join(process.cwd(), process.env.GENERATED_DIR || 'generated'),
+        serveRoot: '/files',
+      },
+      // Admin dashboard (open https://<your-api-host>/admin) and the embeddable contact/chatbot widget
+      // (<script src="https://<your-api-host>/widget/sherpar-widget.js">).
+      { rootPath: join(process.cwd(), 'public', 'admin'), serveRoot: '/admin' },
+      { rootPath: join(process.cwd(), 'public', 'widget'), serveRoot: '/widget' },
+    ),
     DatabaseModule,
     HealthModule,
     StorageModule,
@@ -60,6 +71,11 @@ import { HealthModule } from './health/health.module';
     AudioModule,
     JobSourceSettingsModule,
     AiTrainingJobsModule,
+    RealtimeModule,
+    AdminModule,
+    SupportModule,
+    ChatbotModule,
+    TesterModule,
   ],
 })
 export class AppModule {}

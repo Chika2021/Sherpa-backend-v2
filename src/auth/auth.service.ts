@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -8,6 +8,7 @@ import * as crypto from 'crypto';
 import { User, normalizeEmail } from '../entities/user.entity';
 import { isUuid } from '../database/db-utils';
 import { MailService } from '../mail/mail.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { TokensService } from '../tokens/tokens.service';
 import { FREE_SIGNUP_TOKENS } from '../tokens/token-pricing.config';
 import { RegisterDto } from './dto/register.dto';
@@ -28,6 +29,7 @@ export class AuthService {
     private config: ConfigService,
     private mail: MailService,
     private tokens: TokensService,
+    private realtime: RealtimeService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -75,12 +77,24 @@ export class AuthService {
       }
     }
 
+    // Tell the admin dashboard's live counter a new user just joined.
+    this.realtime.publish({
+      type: 'user.registered',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email,
+        createdAt: user.createdAt,
+      },
+    });
+
     return this.buildAuthResponse(user.id, user.email, {
       id: user.id,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
       tokens,
+      role: user.role ?? 'USER',
     });
   }
 
@@ -90,6 +104,12 @@ export class AuthService {
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
+    if (user.suspended) {
+      throw new ForbiddenException('This account has been suspended. Please contact support.');
+    }
+
+    // Best-effort: never fail a login because the timestamp write failed.
+    this.users.update({ id: user.id }, { lastLoginAt: new Date() }).catch(() => undefined);
 
     return this.buildAuthResponse(user.id, user.email, {
       id: user.id,
@@ -97,6 +117,7 @@ export class AuthService {
       firstName: user.firstName,
       lastName: user.lastName,
       tokens: user.tokens,
+      role: user.role ?? 'USER',
     });
   }
 

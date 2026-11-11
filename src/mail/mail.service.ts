@@ -91,6 +91,27 @@ If you didn't request this, you can safely ignore this email.`;
     await this.send({ to, subject, text, html });
   }
 
+  /** Generic notification email (helpdesk replies, new-ticket alerts to the admins). Never throws. */
+  async sendNotification(to: string, subject: string, text: string): Promise<void> {
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const html = text
+      .split(/\n{2,}/)
+      .map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`)
+      .join('');
+    try {
+      await this.send({ to, subject, text, html });
+    } catch (err) {
+      this.logger.error(`Email "${subject}" to ${to} failed: ${(err as Error).message}`);
+    }
+  }
+
+  /** Which provider will actually deliver mail (for the admin dashboard). */
+  providerName(): 'brevo' | 'resend' | 'smtp' | 'none' {
+    if (this.brevoKey) return 'brevo';
+    if (this.resendKey) return 'resend';
+    return this.transporter ? 'smtp' : 'none';
+  }
+
   private async send(msg: { to: string; subject: string; text: string; html: string }) {
     if (this.brevoKey) return this.sendViaBrevo(msg);
     if (this.resendKey) return this.sendViaResend(msg);

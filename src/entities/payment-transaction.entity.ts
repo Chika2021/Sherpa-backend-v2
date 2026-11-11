@@ -17,9 +17,16 @@ export class PaymentTransaction extends SerializableEntity {
   @Column({ type: 'uuid' })
   userId: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  // No database foreign key on purpose: payment records are financial history and must survive the
+  // payer's account being deleted (the dashboard's delete-user action). payerEmail/payerName below keep
+  // a readable "who paid" after that. Run the schema sync once after upgrading to drop the old constraint.
+  @ManyToOne(() => User, { createForeignKeyConstraints: false })
   @JoinColumn({ name: 'userId' })
   user?: User;
+
+  // Snapshot of the payer, copied when the payment is created (and back-filled when an account is deleted).
+  @Column({ type: 'text', nullable: true, default: null }) payerEmail?: string | null;
+  @Column({ type: 'text', nullable: true, default: null }) payerName?: string | null;
 
   // Our own reference, sent to Paystack and used to look the transaction back
   // up from both the webhook and the "verify on return" flow.

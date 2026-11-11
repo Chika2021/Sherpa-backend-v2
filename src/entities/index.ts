@@ -18,6 +18,8 @@ export * from './live-interview.entity';
 export * from './skill-tutorial.entity';
 export * from './token-billing-ledger.entity';
 export * from './job-source-settings.entity';
+export * from './support-ticket.entity';
+export * from './support-message.entity';
 
 import { User } from './user.entity';
 import { Resume } from './resume.entity';
@@ -37,6 +39,8 @@ import { LiveInterview } from './live-interview.entity';
 import { SkillTutorial } from './skill-tutorial.entity';
 import { TokenBillingLedger } from './token-billing-ledger.entity';
 import { JobSourceSettings } from './job-source-settings.entity';
+import { SupportTicket } from './support-ticket.entity';
+import { SupportMessage } from './support-message.entity';
 
 /** Every entity, in one place - used by both the Nest connection and the TypeORM CLI data source. */
 export const ALL_ENTITIES = [
@@ -58,4 +62,6 @@ export const ALL_ENTITIES = [
   SkillTutorial,
   TokenBillingLedger,
   JobSourceSettings,
+  SupportTicket,
+  SupportMessage,
 ];

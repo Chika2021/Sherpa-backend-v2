@@ -1,5 +1,6 @@
 import { BeforeInsert, BeforeUpdate, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { SerializableEntity } from './serializable.entity';
+import type { Role } from '../common/roles';
 
 @Entity('users')
 export class User extends SerializableEntity {
@@ -36,6 +37,19 @@ export class User extends SerializableEntity {
   // stored. Never returned to clients.
   @Column({ type: 'text', nullable: true }) passwordResetTokenHash?: string | null;
   @Column({ type: 'timestamptz', nullable: true }) passwordResetExpiresAt?: Date | null;
+
+  // 'USER' (default), 'TESTER', 'STAFF', 'ADMIN' or 'SUPER_ADMIN' - see common/roles.ts for what each can do.
+  // SUPER_ADMIN comes only from the SUPER_ADMIN_* env vars (AdminBootstrapService); every other role is
+  // assigned by a super admin from the dashboard. Never settable through the public API.
+  @Index()
+  @Column({ type: 'text', default: 'USER' })
+  role: Role;
+
+  // Suspended accounts can't log in or use any authenticated endpoint.
+  @Column({ type: 'boolean', default: false })
+  suspended: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true }) lastLoginAt?: Date | null;
 
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;

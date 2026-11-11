@@ -24,7 +24,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // A token issued before the move to Postgres carries a Mongo id - treat it as unauthenticated.
     if (!isUuid(payload?.sub)) return null;
     const user = await this.users.findOneBy({ id: payload.sub });
-    if (!user) return null;
+    if (!user || user.suspended) return null;
     const { passwordHash, passwordResetTokenHash, passwordResetExpiresAt, ...safeUser } = user.toJSON() as any;
     return safeUser;
   }

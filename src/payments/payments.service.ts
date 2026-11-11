@@ -111,6 +111,8 @@ export class PaymentsService {
 
     const transaction = await this.transactions.save(this.transactions.create({
       userId,
+      payerEmail: user.email,
+      payerName: [user.firstName, user.lastName].filter(Boolean).join(' ') || null,
       reference,
       tokensRequested: tokenCount,
       packageId,
@@ -166,6 +168,8 @@ export class PaymentsService {
 
     const transaction = await this.transactions.save(this.transactions.create({
       userId,
+      payerEmail: user.email,
+      payerName: [user.firstName, user.lastName].filter(Boolean).join(' ') || null,
       reference,
       tokensRequested: 0,
       packageId: null,
