@@ -141,6 +141,7 @@ export const DEFAULT_FEATURE_TOKEN_COST = 1;
 export const FEATURE_TOKEN_COSTS: Record<string, number> = {
   parseResume: 1,
   buildResume: 1,
+  editResume: 1, // AI resume editor: one natural-language edit instruction applied to a resume
   discoverJobs: 1, // heavy fallback path only - see rankJobMatches for the normal (cheap) job-search path
   rankJobMatches: 1,
   generateTailoredResume: 1,

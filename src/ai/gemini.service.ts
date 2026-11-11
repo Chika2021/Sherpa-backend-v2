@@ -1160,6 +1160,64 @@ ${JSON.stringify(profile)}`;
   }
 
   /**
+   * AI resume editor: applies a plain-language instruction ("make my summary shorter",
+   * "add Docker to my skills", "rewrite the Acme bullet points with metrics") to an existing
+   * profile and returns the full updated profile plus a short list of what changed.
+   */
+  async editResume(
+    userId: string,
+    profile: ResumeProfile,
+    instruction: string,
+  ): Promise<{ profile: ResumeProfile; changes: string[] }> {
+    const model = this.client.getGenerativeModel({ model: this.modelName });
+    const prompt = `You are an expert resume editor. Apply the user's instruction to the resume profile below.
+
+Rules:
+- Change ONLY what the instruction asks for; keep every other field exactly as it is.
+- Never invent employers, job titles, dates, degrees, or credentials. You may rephrase, reorder, tighten,
+  and improve wording, and add things the user explicitly tells you in the instruction.
+- If the instruction asks for something impossible or unrelated to editing the resume, change nothing and say so in "changes".
+- Keep the same JSON shape. Use null for unknown optional values.
+
+Return ONLY valid JSON (no markdown fences, no commentary) matching exactly this shape:
+{
+  "profile": {
+    "fullName": string|null,
+    "email": string|null,
+    "phone": string|null,
+    "location": string|null,
+    "headline": string|null,
+    "summary": string|null,
+    "skills": string[],
+    "yearsOfExperience": number|null,
+    "experience": [{"title": string, "company": string, "startDate": string|null, "endDate": string|null, "description": string|null}],
+    "education": [{"school": string, "degree": string|null, "field": string|null, "year": string|null}]
+  },
+  "changes": string[]   // 1-6 short plain-English bullets describing what you changed
+}
+
+USER INSTRUCTION:
+"""
+${instruction.slice(0, 2000)}
+"""
+
+CURRENT RESUME PROFILE:
+${JSON.stringify(profile)}`;
+
+    const text = await this.callModel(model, prompt, { userId, label: 'editResume' });
+    const parsed = this.extractJson<{ profile?: ResumeProfile; changes?: string[] }>(text);
+    if (!parsed?.profile || !Array.isArray(parsed.profile.experience) || !Array.isArray(parsed.profile.education)) {
+      this.logger.error(`editResume returned an unusable profile: ${text.slice(0, 2000)}`);
+      throw new InternalServerErrorException('The AI could not apply that edit. Please rephrase and try again.');
+    }
+    parsed.profile.skills = Array.isArray(parsed.profile.skills) ? parsed.profile.skills : [];
+    return {
+      profile: parsed.profile,
+      changes: Array.isArray(parsed.changes) ? parsed.changes.map(String).slice(0, 8) : [],
+    };
+  }
+
+  /**
    * NOT currently called by JobsService.search - kept here in case a future
    * "broaden my search with AI suggestions" opt-in feature wants it, but job
    * search itself only ever returns real listings from real job sources now

@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Body,
   Patch,
   Post,
   UploadedFile,
@@ -16,6 +17,7 @@ import { extname } from 'path';
 import { v4 as uuid } from 'uuid';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AiEditResumeDto, UpdateResumeProfileDto } from './dto/resume-edit.dto';
 import { ResumesService } from './resumes.service';
 import { isSupportedResumeFile, SUPPORTED_RESUME_MESSAGE } from './resume-file-types';
 
@@ -55,6 +57,25 @@ export class ResumesController {
   @Get(':id')
   findOne(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.resumesService.findOne(userId, id);
+  }
+
+  // Manual editor: save the edited structured content (send the whole profile).
+  @Patch(':id/profile')
+  updateProfile(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: UpdateResumeProfileDto) {
+    return this.resumesService.updateProfile(userId, id, dto);
+  }
+
+  // AI editor: body { "instruction": "make my summary shorter and add Docker to skills" }
+  // Returns { resume, changes } - `changes` is a short list of what the AI changed.
+  @Post(':id/ai-edit')
+  aiEdit(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: AiEditResumeDto) {
+    return this.resumesService.aiEdit(userId, id, dto.instruction);
+  }
+
+  // Undo the most recent edit (one step).
+  @Post(':id/undo')
+  undo(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.resumesService.undoEdit(userId, id);
   }
 
   @Patch(':id/primary')

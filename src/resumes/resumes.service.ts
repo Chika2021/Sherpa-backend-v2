@@ -1,13 +1,14 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { v4 as uuid } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
-import { GeminiService } from '../ai/gemini.service';
+import { GeminiService, ResumeProfile } from '../ai/gemini.service';
 import { ResumeParserService } from './resume-parser.service';
 import { Resume } from '../entities/resume.entity';
 import { assertValidId, ownedBy } from '../database/db-utils';
+import { UpdateResumeProfileDto } from './dto/resume-edit.dto';
 
 const RESUME_SAVE_ATTEMPTS = 3;
 const RESUME_SAVE_RETRY_DELAYS_MS = [300, 900];
@@ -131,6 +132,83 @@ export class ResumesService {
     return resume;
   }
 
+  /** Drops empty strings/nulls so the stored profile stays clean (the AI parser uses null for "unknown"). */
+  private cleanProfile(input: any): ResumeProfile {
+    const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+    const out: any = {
+      fullName: str(input.fullName),
+      email: str(input.email),
+      phone: str(input.phone),
+      location: str(input.location),
+      headline: str(input.headline),
+      summary: str(input.summary),
+      yearsOfExperience: typeof input.yearsOfExperience === 'number' ? input.yearsOfExperience : undefined,
+      skills: (input.skills || []).map((x: unknown) => str(x)).filter(Boolean),
+      experience: (input.experience || [])
+        .filter((e: any) => str(e?.title) || str(e?.company))
+        .map((e: any) => ({
+          title: str(e.title) ?? '',
+          company: str(e.company) ?? '',
+          startDate: str(e.startDate),
+          endDate: str(e.endDate),
+          description: str(e.description),
+        })),
+      education: (input.education || [])
+        .filter((e: any) => str(e?.school))
+        .map((e: any) => ({
+          school: str(e.school)!,
+          degree: str(e.degree),
+          field: str(e.field),
+          year: str(e.year),
+        })),
+    };
+    for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+    return out as ResumeProfile;
+  }
+
+  private async saveProfile(resume: Resume, next: ResumeProfile) {
+    await this.resumes.update(
+      { id: resume.id },
+      { previousProfile: (resume.parsedProfile ?? null) as any, parsedProfile: next as any },
+    );
+    return this.resumes.findOneByOrFail({ id: resume.id });
+  }
+
+  /** Manual editor: replaces the structured resume content with what the user edited. */
+  async updateProfile(userId: string, id: string, dto: UpdateResumeProfileDto) {
+    const resume = await this.findOne(userId, id);
+    const next = this.cleanProfile(dto);
+    if (!next.fullName && !next.experience.length && !next.skills.length && !next.education.length) {
+      throw new BadRequestException('The resume cannot be empty.');
+    }
+    return this.saveProfile(resume, next);
+  }
+
+  /**
+   * AI editor: the user describes a change in plain language and the AI applies it.
+   * The change is saved right away (one-step undo available) and the response lists what changed.
+   */
+  async aiEdit(userId: string, id: string, instruction: string) {
+    const resume = await this.findOne(userId, id);
+    if (!resume.parsedProfile) {
+      throw new BadRequestException('That resume has no parsed content to edit yet.');
+    }
+    const result = await this.gemini.editResume(userId, resume.parsedProfile as ResumeProfile, instruction);
+    const updated = await this.saveProfile(resume, this.cleanProfile(result.profile));
+    return { resume: updated, changes: result.changes };
+  }
+
+  /** Reverts the most recent edit (manual or AI). Only one step is kept. */
+  async undoEdit(userId: string, id: string) {
+    const resume = await this.findOne(userId, id);
+    if (!resume.previousProfile) throw new BadRequestException('Nothing to undo.');
+    await this.resumes.update(
+      { id },
+      { parsedProfile: resume.previousProfile as any, previousProfile: null },
+    );
+    return this.resumes.findOneByOrFail({ id });
+  }
+
   async setPrimary(userId: string, id: string) {
     await this.findOne(userId, id);
     await this.resumes.manager.transaction(async (em) => {
@@ -159,4 +237,4 @@ export class ResumesService {
     return resume;
   }
 }
-//Resume service 
+ 

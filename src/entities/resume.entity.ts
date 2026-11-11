@@ -4,7 +4,7 @@ import { User } from './user.entity';
 
 @Entity('resumes')
 export class Resume extends SerializableEntity {
-  static readonly keepNull = ['parsedProfile'];
+  static readonly keepNull = ['parsedProfile', 'previousProfile'];
 
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -25,6 +25,10 @@ export class Resume extends SerializableEntity {
   // Structured extraction: skills, experience, education, etc.
   @Column({ type: 'jsonb', nullable: true, default: null })
   parsedProfile?: Record<string, any> | null;
+
+  // Snapshot of parsedProfile taken right before the latest edit, so one edit can be undone.
+  @Column({ type: 'jsonb', nullable: true, default: null })
+  previousProfile?: Record<string, any> | null;
 
   @Column({ type: 'boolean', default: false }) isPrimary: boolean;
 
