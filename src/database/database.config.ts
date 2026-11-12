@@ -65,6 +65,9 @@ export function buildDataSourceOptions(env: (key: string) => string | undefined)
       // Supabase's pooler closes idle connections; give ours up first and keep live ones alive, so the
       // app doesn't pick a dead connection ("read ECONNRESET").
       idleTimeoutMillis: 10_000,
+      // Retire a connection after it has served this many queries, so long-lived ones the pooler may
+      // have silently dropped are replaced instead of reused.
+      maxUses: 500,
       // How long to wait for a new connection (TLS included). Slow or flaky networks need more than 15s.
       connectionTimeoutMillis: Number(env('DB_CONNECTION_TIMEOUT_MS')) || 30_000,
       keepAlive: true,

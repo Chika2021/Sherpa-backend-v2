@@ -251,12 +251,12 @@ export class AdminService {
     if (q.status === 'active') qb.andWhere('u.suspended = false');
 
     const sortable: Record<string, string> = {
-      createdAt: 'u."createdAt"',
-      lastLoginAt: 'u."lastLoginAt"',
+      createdAt: 'u.createdAt',
+      lastLoginAt: 'u.lastLoginAt',
       email: 'u.email',
       tokens: 'u.tokens',
     };
-    qb.orderBy(sortable[q.sort ?? 'createdAt'] ?? 'u."createdAt"', q.order === 'asc' ? 'ASC' : 'DESC', 'NULLS LAST')
+    qb.orderBy(sortable[q.sort ?? 'createdAt'] ?? 'u.createdAt', q.order === 'asc' ? 'ASC' : 'DESC', 'NULLS LAST')
       .skip((page - 1) * limit)
       .take(limit);
 
@@ -486,7 +486,7 @@ export class AdminService {
         { like },
       );
     }
-    qb.orderBy('p."createdAt"', 'DESC').skip((page - 1) * limit).take(limit);
+    qb.orderBy('p.createdAt', 'DESC').skip((page - 1) * limit).take(limit);
 
     const [rows, total] = await qb.getManyAndCount();
     return {

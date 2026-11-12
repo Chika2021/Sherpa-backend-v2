@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { DbRetryInterceptor } from '../common/db-retry.interceptor';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RateLimiter, clientIp } from '../common/rate-limiter';
@@ -74,6 +75,7 @@ export class SupportUserController {
 
 /** Admin side of the helpdesk. ADMIN can read tickets; only SUPER_ADMIN can reply or change a status. */
 @UseGuards(JwtAuthGuard, RolesGuard)
+@UseInterceptors(DbRetryInterceptor)
 @Roles('ADMIN', 'SUPER_ADMIN')
 @Controller('admin/support')
 export class SupportAdminController {

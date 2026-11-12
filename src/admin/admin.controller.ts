@@ -1,7 +1,8 @@
-import { Body, Controller, Delete, Get, MessageEvent, Param, Patch, Post, Query, Sse, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, MessageEvent, Param, Patch, Post, Query, Sse, UseGuards, UseInterceptors } from '@nestjs/common';
 import { EMPTY, Observable, concat, defer, from, interval, map, merge, mergeMap, of } from 'rxjs';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { DbRetryInterceptor } from '../common/db-retry.interceptor';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -18,6 +19,7 @@ import { CreateUserDto, GrantTokensDto, ListPaymentsQueryDto, ListUsersQueryDto,
  * STAFF has its own countdown-only endpoints (CountdownController); the helpdesk is in SupportAdminController.
  */
 @UseGuards(JwtAuthGuard, RolesGuard)
+@UseInterceptors(DbRetryInterceptor)
 @Roles('ADMIN', 'MANAGEMENT', 'SUPER_ADMIN')
 @Controller('admin')
 export class AdminController {
