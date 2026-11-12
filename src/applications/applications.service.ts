@@ -14,6 +14,8 @@ import { GenerateForJobDto } from './dto/generate-for-job.dto';
 import { RecordResultDto } from './dto/record-result.dto';
 import { Application } from '../entities/application.entity';
 import { Job } from '../entities/job.entity';
+import { InterviewPrep } from '../entities/interview-prep.entity';
+import { jobToPrepInput } from '../interview-prep/job-prep-input';
 import { EmailApplication } from '../entities/email-application.entity';
 import { GeneratedDocument } from '../entities/generated-document.entity';
 import { ApplicationStatus } from '../entities/enums';
@@ -42,6 +44,7 @@ export class ApplicationsService {
     @InjectRepository(Job) private jobs: Repository<Job>,
     @InjectRepository(GeneratedDocument) private documents: Repository<GeneratedDocument>,
     @InjectRepository(EmailApplication) private emailApplications: Repository<EmailApplication>,
+    @InjectRepository(InterviewPrep) private interviewPreps: Repository<InterviewPrep>,
     private resumesService: ResumesService,
     private documentsService: DocumentsService,
     private submitterRegistry: SubmitterRegistry,
@@ -377,13 +380,42 @@ export class ApplicationsService {
     if (json.user) json.user = stripUserSecrets(json.user);
     // Present only for applications made by email (see applications/email).
     const email = await this.emailApplications.findOneBy({ applicationId });
-    return { ...json, documents: documents.map((d) => d.toJSON()), ...(email ? { emailApplication: email.toJSON() } : {}) };
+    const interviewPrepId = (await this.interviewPrepIdsFor(application.userId, [application])).get(application.id);
+    return {
+      ...json,
+      documents: documents.map((d) => d.toJSON()),
+      ...(email ? { emailApplication: email.toJSON() } : {}),
+      // Lets "Prep for interview" on the details page open an existing prep instead of generating again.
+      ...(interviewPrepId ? { interviewPrepId } : {}),
+    };
   }
 
   /** Used by the controller - same as getOwned but with generated documents attached. */
   async getOwnedForResponse(userId: string, applicationId: string): Promise<Record<string, any>> {
     const application = await this.getOwned(userId, applicationId);
     return this.attachDocuments(application, applicationId);
+  }
+
+  /**
+   * "Prep for interview" support: for the applications already applied for, the id of an existing interview prep
+   * generated for that job (matched on the same job-derived title + description the prep was created from), so
+   * the button can open it instead of generating again.
+   */
+  private async interviewPrepIdsFor(userId: string, applications: Application[]): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    const applied = applications.filter((a) => a.status === 'SUBMITTED' && a.job);
+    if (!applied.length) return result;
+    const inputs = new Map(applied.map((a) => [a.id, jobToPrepInput(a.job!)]));
+    const preps = await this.interviewPreps.find({
+      where: { userId, jobTitle: In([...new Set([...inputs.values()].map((i) => i.jobTitle))]) },
+      select: { id: true, jobTitle: true, jobDescription: true, createdAt: true },
+      order: { createdAt: 'DESC' },
+    });
+    for (const [applicationId, input] of inputs) {
+      const match = preps.find((p) => p.jobTitle === input.jobTitle && p.jobDescription === input.jobDescription);
+      if (match) result.set(applicationId, match.id);
+    }
+    return result;
   }
 
   async listForUser(userId: string): Promise<Record<string, any>[]> {
@@ -411,10 +443,15 @@ export class ApplicationsService {
     const emails = await this.emailApplications.find({ where: { applicationId: In(applications.map((a) => a.id)) } });
     const emailByApplication = new Map(emails.map((e) => [e.applicationId, e]));
 
+    const prepIdByApplication = await this.interviewPrepIdsFor(userId, applications);
+
     return applications.map((a) => {
       const email = emailByApplication.get(a.id);
+      const interviewPrepId = prepIdByApplication.get(a.id);
       return {
         ...a.toJSON(),
+        canPrepInterview: a.status === 'SUBMITTED' && !!a.job,
+        ...(interviewPrepId ? { interviewPrepId } : {}),
         documents: docsByApplication.get(a.id) || [],
         // Only for applications made by email: lets the list show "emailed to x" / "draft" without another request.
         ...(email

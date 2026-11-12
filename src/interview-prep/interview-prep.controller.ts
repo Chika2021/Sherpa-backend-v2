@@ -19,6 +19,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { InterviewPrepService } from './interview-prep.service';
 import { CreateInterviewPrepDto } from './dto/create-interview-prep.dto';
+import { PrepFromApplicationDto } from './dto/prep-from-application.dto';
 import { AnswerCbtQuestionDto } from './dto/answer-cbt-question.dto';
 import { SubmitVoiceAnswerDto } from './dto/submit-voice-answer.dto';
 import { AskAiDto } from '../common/dto/ask-ai.dto';
@@ -33,6 +34,20 @@ export class InterviewPrepController {
   @Get('voices')
   getAvailableVoices() {
     return this.interviewPrepService.getAvailableVoices();
+  }
+
+  // "Prep for interview" button on an applied job (Applications page). Uses the
+  // job info already saved with the application - no body needed. Returns the
+  // prep (open it at the Interview Prep page by its id); reuses an existing
+  // prep for the same job unless { regenerate: true } is sent.
+  // Body (all optional): { count?, regenerate? }
+  @Post('from-application/:applicationId')
+  createFromApplication(
+    @CurrentUser('id') userId: string,
+    @Param('applicationId') applicationId: string,
+    @Body() dto: PrepFromApplicationDto,
+  ) {
+    return this.interviewPrepService.createFromApplication(userId, applicationId, dto);
   }
 
   // Generates interview questions + model answers for a job.

@@ -8,6 +8,8 @@ import {
   VoiceAnswer,
   VoiceInterviewResult,
 } from '../entities/interview-prep.entity';
+import { Application } from '../entities/application.entity';
+import { jobToPrepInput } from './job-prep-input';
 import { GeminiService } from '../ai/gemini.service';
 import { AudioService } from '../audio/audio.service';
 import { CreateInterviewPrepDto } from './dto/create-interview-prep.dto';
@@ -21,6 +23,7 @@ import { ASK_AI_MAX_STORED_MESSAGES } from '../common/ask-ai.types';
 export class InterviewPrepService {
   constructor(
     @InjectRepository(InterviewPrep) private preps: Repository<InterviewPrep>,
+    @InjectRepository(Application) private applications: Repository<Application>,
     @InjectDataSource() private dataSource: DataSource,
     private gemini: GeminiService,
     private audio: AudioService,
@@ -48,6 +51,42 @@ export class InterviewPrepService {
         questions,
       }),
     );
+  }
+
+  /**
+   * "Prep for interview" on an application the user has already applied for.
+   * Builds the prep from the job information already saved with that
+   * application, so nothing has to be re-entered. If a prep for this same job
+   * already exists it is returned as-is (reused: true) rather than generating -
+   * and charging for - a new set of questions on every click; pass
+   * `regenerate` to force a fresh one.
+   */
+  async createFromApplication(userId: string, applicationId: string, opts: { count?: number; regenerate?: boolean } = {}) {
+    const application = await this.applications.findOne({
+      where: ownedBy(applicationId, userId, 'Application'),
+      relations: { job: true },
+    });
+    if (!application) throw new NotFoundException('Application not found');
+    if (application.status !== 'SUBMITTED') {
+      throw new BadRequestException('Interview prep from an application is available once you have applied for the job.');
+    }
+    if (!application.job) throw new NotFoundException('The job for this application no longer exists.');
+
+    const input = jobToPrepInput(application.job);
+
+    if (!opts.regenerate) {
+      const existing = await this.findExistingForJob(userId, input.jobTitle, input.jobDescription);
+      if (existing) return { ...existing.toJSON(), reused: true };
+    }
+
+    const created = await this.create(userId, { ...input, count: opts.count });
+    return { ...created.toJSON(), reused: false };
+  }
+
+  /** The user's most recent prep generated from exactly this job title + description, if any. */
+  private findExistingForJob(userId: string, jobTitle: string, jobDescription: string) {
+    assertValidId(userId, 'User');
+    return this.preps.findOne({ where: { userId, jobTitle, jobDescription }, order: { createdAt: 'DESC' } });
   }
 
   findAllForUser(userId: string) {
