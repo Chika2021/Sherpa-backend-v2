@@ -63,9 +63,9 @@ export const KNOWLEDGE: KnowledgeTopic[] = [
   {
     id: 'apply',
     title: 'Applying to jobs',
-    keywords: ['apply', 'application', 'applications', 'submit', 'assisted apply', 'auto apply', 'autoapply', 'cover letter', 'tailor', 'status'],
+    keywords: ['apply', 'application', 'applications', 'submit', 'assisted apply', 'cover letter', 'tailor', 'status'],
     answer:
-      'For any job you can generate a tailored resume and cover letter. Assisted Apply opens the application form, fills it in for you and waits for you to review and press Submit. Auto-Apply can send several applications in a batch. Track everything under Applications.',
+      'For any job you can generate a tailored resume and cover letter. Assisted Apply opens the application form, fills it in for you and waits for you to review and press Submit. Track everything under Applications.',
     path: '/applications',
     linkLabel: 'View my applications',
   },

@@ -27,15 +27,6 @@ export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 export const DOCUMENT_TYPES = ['RESUME', 'COVER_LETTER'] as const;
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
-export const AUTO_APPLY_STATUSES = [
-  'QUEUED',
-  'RUNNING',
-  'COMPLETED',
-  'COMPLETED_WITH_ERRORS',
-  'CANCELLED',
-] as const;
-export type AutoApplyStatus = (typeof AUTO_APPLY_STATUSES)[number];
-
 // Apply-by-email: the draft is edited, then sent from the user's review. Nothing is ever sent without an explicit send call.
 export const EMAIL_APPLICATION_STATUSES = ['DRAFT', 'SENDING', 'SENT', 'FAILED'] as const;
 export type EmailApplicationStatus = (typeof EMAIL_APPLICATION_STATUSES)[number];

@@ -52,7 +52,7 @@ export class ApplicationsService {
     private config: ConfigService,
   ) {}
 
-  async create(userId: string, dto: CreateApplicationDto, autoApplyBatchId?: string) {
+  async create(userId: string, dto: CreateApplicationDto) {
     assertValidId(dto.jobId, 'Job');
     assertValidId(userId, 'User');
     const job = await this.jobs.findOneBy({ id: dto.jobId });
@@ -63,15 +63,7 @@ export class ApplicationsService {
       : await this.resumesService.getPrimary(userId);
 
     const existing = await this.applications.findOne({ where: { userId, jobId: dto.jobId } });
-    if (existing) {
-      // An auto-apply batch that targets specific jobs may reuse an earlier (unsent / failed) application:
-      // tag it with the batch so the batch can see, count and resume it.
-      if (autoApplyBatchId && existing.autoApplyBatchId !== autoApplyBatchId) {
-        await this.applications.update({ id: existing.id }, { autoApplyBatchId });
-        existing.autoApplyBatchId = autoApplyBatchId;
-      }
-      return existing;
-    }
+    if (existing) return existing;
 
     return this.applications.save(
       this.applications.create({
@@ -79,7 +71,6 @@ export class ApplicationsService {
         jobId: dto.jobId,
         resumeId: resume.id,
         status: 'PENDING',
-        autoApplyBatchId,
       }),
     );
   }

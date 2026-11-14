@@ -3,7 +3,6 @@ import { SerializableEntity } from './serializable.entity';
 import { User } from './user.entity';
 import { Job } from './job.entity';
 import { Resume } from './resume.entity';
-import { AutoApplyBatch } from './auto-apply-batch.entity';
 import { ApplicationStatus } from './enums';
 
 @Entity('applications')
@@ -46,10 +45,6 @@ export class Application extends SerializableEntity {
   @Column({ type: 'text', nullable: true, default: null }) feedback?: string | null;
   @Column({ type: 'timestamptz', nullable: true, default: null }) submittedAt?: Date | null;
 
-  @Index()
-  @Column({ type: 'uuid', nullable: true })
-  autoApplyBatchId?: string;
-
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
 
@@ -68,8 +63,4 @@ export class Application extends SerializableEntity {
   @ManyToOne(() => Resume, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'resumeId' })
   resume?: Resume;
-
-  @ManyToOne(() => AutoApplyBatch, { onDelete: 'SET NULL', nullable: true })
-  @JoinColumn({ name: 'autoApplyBatchId' })
-  autoApplyBatch?: AutoApplyBatch;
 }

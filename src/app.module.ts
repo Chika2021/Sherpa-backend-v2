@@ -13,7 +13,6 @@ import { ResumesModule } from './resumes/resumes.module';
 import { AiModule } from './ai/ai.module';
 import { JobsModule } from './jobs/jobs.module';
 import { ApplicationsModule } from './applications/applications.module';
-import { AutoApplyModule } from './auto-apply/auto-apply.module';
 import { DocumentsModule } from './documents/documents.module';
 import { ResumeBuilderModule } from './resume-builder/resume-builder.module';
 import { TokensModule } from './tokens/tokens.module';
@@ -60,7 +59,6 @@ import { TesterModule } from './tester/tester.module';
     AiModule,
     JobsModule,
     ApplicationsModule,
-    AutoApplyModule,
     DocumentsModule,
     ResumeBuilderModule,
     TokensModule,

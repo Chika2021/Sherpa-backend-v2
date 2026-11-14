@@ -11,7 +11,6 @@ export * from './saved-ai-training-job.entity';
 export * from './generated-document.entity';
 export * from './application.entity';
 export * from './email-application.entity';
-export * from './auto-apply-batch.entity';
 export * from './payment-transaction.entity';
 export * from './site-credential.entity';
 export * from './interview-prep.entity';
@@ -33,7 +32,6 @@ import { SavedAiTrainingJob } from './saved-ai-training-job.entity';
 import { GeneratedDocument } from './generated-document.entity';
 import { Application } from './application.entity';
 import { EmailApplication } from './email-application.entity';
-import { AutoApplyBatch } from './auto-apply-batch.entity';
 import { PaymentTransaction } from './payment-transaction.entity';
 import { SiteCredential } from './site-credential.entity';
 import { InterviewPrep } from './interview-prep.entity';
@@ -57,7 +55,6 @@ export const ALL_ENTITIES = [
   GeneratedDocument,
   Application,
   EmailApplication,
-  AutoApplyBatch,
   PaymentTransaction,
   SiteCredential,
   InterviewPrep,

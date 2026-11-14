@@ -250,7 +250,7 @@ export class TokensService {
 
   /**
    * Generic debit for anything that isn't a Gemini call (e.g. charging per
-   * auto-apply submission). Same ledger treatment as `charge`.
+   * submission). Same ledger treatment as `charge`.
    */
   async spend(userId: string, tokens: number, label: string): Promise<number> {
     if (!Number.isFinite(tokens) || tokens <= 0) {
