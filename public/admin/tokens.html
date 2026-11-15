@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Super Admin · Tokens</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#16181d; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --add:#16a34a; --sub:#dc2626; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --card:#181b21; --text:#eceef2; --muted:#9aa3b2; --line:#2a2f38; --accent:#60a5fa; --add:#4ade80; --sub:#f87171; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:20px; margin:0 0 4px; } p.sub { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+  input { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+  input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  button { padding:8px 14px; border:0; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; color:#fff; background:var(--accent); }
+  button.add { background:var(--add); } button.sub { background:var(--sub); }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:10px; align-items:end; flex-wrap:wrap; } .row > div { flex:1; min-width:140px; }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .tablewrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  td.num { font-variant-numeric:tabular-nums; font-weight:600; }
+  .pill { font-size:12px; padding:2px 8px; border-radius:99px; border:1px solid var(--line); color:var(--muted); }
+  .msg { padding:10px 12px; border-radius:8px; margin:12px 0 0; font-size:14px; } .msg.ok { background:rgba(22,163,74,.12); color:var(--add); } .msg.err { background:rgba(220,38,38,.12); color:var(--sub); }
+  .hidden { display:none; } .empty { color:var(--muted); padding:16px 8px; }
+  #panel { border-color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div><h1>Token manager</h1><p class="sub">Super admin · add or subtract a user's tokens</p></div>
+    <button id="back" class="ghost" type="button">&larr; Back</button>
+  </div>
+
+  <section id="nosession" class="card hidden">
+    <strong>Checking your super admin session…</strong>
+    <p class="sub" id="nsText" style="margin:6px 0 12px">One moment.</p>
+    <button id="nsBack" type="button">Back to the dashboard</button>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="card">
+      <label for="search">Find a user (email, name or phone)</label>
+      <input id="search" type="search" placeholder="Start typing…">
+    </div>
+
+    <div id="panel" class="card hidden">
+      <div class="top"><strong id="pName"></strong><button id="pClose" class="ghost">Close</button></div>
+      <p class="sub">Current balance: <strong id="pBal"></strong> tokens</p>
+      <div class="row">
+        <div><label for="amount">Amount</label><input id="amount" type="number" min="0.01" max="100000" step="any" placeholder="e.g. 5"></div>
+        <div><label for="note">Note (optional)</label><input id="note" maxlength="120" placeholder="Reason, shown in the user's history"></div>
+        <button id="addBtn" class="add">Add</button>
+        <button id="subBtn" class="sub">Subtract</button>
+      </div>
+      <div id="panelMsg"></div>
+    </div>
+
+    <div class="card tablewrap">
+      <table><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Tokens</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+      <div id="empty" class="empty hidden">No users found.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  var API = '/api/v1';
+  var jwt = null, selected = null, timer = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  function show(el, on) { el.classList.toggle('hidden', !on); }
+  function msg(el, text, ok) { el.textContent = ''; if (!text) return; var d = document.createElement('div'); d.className = 'msg ' + (ok ? 'ok' : 'err'); d.textContent = text; el.appendChild(d); }
+
+  // Back: return to the dashboard page the admin came from, or to the dashboard home.
+  function goBack() {
+    var sameSite = false;
+    try { sameSite = document.referrer && new URL(document.referrer).origin === location.origin; } catch (e) {}
+    if (sameSite && history.length > 1) history.back(); else location.href = '/admin';
+  }
+  $('back').onclick = goBack; $('nsBack').onclick = goBack;
+
+  function api(path, opts) {
+    opts = opts || {};
+    return fetch(API + path, {
+      method: opts.method || 'GET',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, jwt ? { Authorization: 'Bearer ' + jwt } : {}),
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (r.status === 401 && jwt) { noSession('Your session has expired. Go back to the dashboard and sign in again.'); }
+        if (!r.ok) { var m = data && data.message; throw new Error(Array.isArray(m) ? m.join(', ') : (m || 'Request failed (' + r.status + ')')); }
+        return data;
+      });
+    });
+  }
+
+  // ---- Reuse the dashboard's existing sign-in (same origin, so it shares the browser's storage). ----
+  var JWT_RE = /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/;
+  function pickJwt(value, depth) {
+    if (typeof value === 'string') {
+      if (JWT_RE.test(value)) return [value];
+      if (depth < 2 && /^[\[{]/.test(value.trim())) { try { return pickJwt(JSON.parse(value), depth + 1); } catch (e) {} }
+      return [];
+    }
+    if (value && typeof value === 'object' && depth < 4) {
+      var out = [];
+      Object.keys(value).forEach(function (k) { out = out.concat(pickJwt(value[k], depth + 1)); });
+      return out;
+    }
+    return [];
+  }
+  function candidateTokens() {
+    var found = [];
+    [window.localStorage, window.sessionStorage].forEach(function (st) {
+      try { for (var i = 0; i < st.length; i++) { found = found.concat(pickJwt(st.getItem(st.key(i)), 0)); } } catch (e) {}
+    });
+    return found.filter(function (t, i) { return found.indexOf(t) === i; });
+  }
+  function tryTokens(list) {
+    if (!list.length) return Promise.reject(new Error('none'));
+    jwt = list[0];
+    return fetch(API + '/dashboard/me', { headers: { Authorization: 'Bearer ' + jwt } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('bad')); })
+      .then(function (res) { if (res.user && res.user.role === 'SUPER_ADMIN') return; throw new Error('not super admin'); })
+      .catch(function () { jwt = null; return tryTokens(list.slice(1)); });
+  }
+  function noSession(text) {
+    jwt = null; selected = null;
+    show($('app'), false); show($('panel'), false); show($('nosession'), true);
+    $('nsText').textContent = text || 'No super admin session was found. Go back to the dashboard, sign in there, then open Token management again.';
+  }
+  function enterApp() { show($('nosession'), false); show($('app'), true); loadUsers(); }
+
+  show($('nosession'), true);
+  tryTokens(candidateTokens()).then(enterApp).catch(function () { noSession(); });
+
+  function loadUsers() {
+    var q = $('search').value.trim();
+    api('/admin/users?limit=50&sort=email&order=asc' + (q ? '&search=' + encodeURIComponent(q) : ''))
+      .then(function (res) { renderRows(res.items || []); })
+      .catch(function (e) { renderRows([]); msg($('panelMsg'), e.message); });
+  }
+  $('search').oninput = function () { clearTimeout(timer); timer = setTimeout(loadUsers, 300); };
+
+  function renderRows(items) {
+    var body = $('rows'); body.textContent = '';
+    show($('empty'), items.length === 0);
+    items.forEach(function (u) {
+      var tr = document.createElement('tr');
+      [u.email, [u.firstName, u.lastName].filter(Boolean).join(' ') || '—'].forEach(function (t) { var td = document.createElement('td'); td.textContent = t; tr.appendChild(td); });
+      var tdRole = document.createElement('td'); var pill = document.createElement('span'); pill.className = 'pill'; pill.textContent = u.role; tdRole.appendChild(pill); tr.appendChild(tdRole);
+      var tdTok = document.createElement('td'); tdTok.className = 'num'; tdTok.textContent = String(u.tokens); tr.appendChild(tdTok);
+      var tdBtn = document.createElement('td'); var b = document.createElement('button'); b.textContent = 'Manage tokens'; b.onclick = function () { select(u); }; tdBtn.appendChild(b); tr.appendChild(tdBtn);
+      body.appendChild(tr);
+    });
+  }
+
+  function select(u) {
+    selected = u; $('pName').textContent = u.email; $('pBal').textContent = u.tokens;
+    $('amount').value = ''; $('note').value = ''; msg($('panelMsg'), ''); show($('panel'), true); $('amount').focus();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  $('pClose').onclick = function () { selected = null; show($('panel'), false); };
+
+  function adjust(kind) {
+    if (!selected) return;
+    var amount = Number($('amount').value);
+    if (!(amount > 0)) { msg($('panelMsg'), 'Enter an amount greater than 0.'); return; }
+    var verb = kind === 'add' ? 'Add' : 'Subtract';
+    if (!confirm(verb + ' ' + amount + ' token(s) ' + (kind === 'add' ? 'to ' : 'from ') + selected.email + '?')) return;
+    $('addBtn').disabled = $('subBtn').disabled = true;
+    api('/admin/users/' + selected.id + '/tokens' + (kind === 'add' ? '' : '/deduct'), { method: 'POST', body: { amount: amount, note: $('note').value.trim() || undefined } })
+      .then(function (res) {
+        selected.tokens = res.balanceAfter; $('pBal').textContent = res.balanceAfter;
+        msg($('panelMsg'), (kind === 'add' ? 'Added ' : 'Subtracted ') + amount + '. New balance: ' + res.balanceAfter + ' tokens.', true);
+        $('amount').value = ''; $('note').value = ''; loadUsers();
+      })
+      .catch(function (e) { msg($('panelMsg'), e.message); })
+      .then(function () { $('addBtn').disabled = $('subBtn').disabled = false; });
+  }
+  $('addBtn').onclick = function () { adjust('add'); };
+  $('subBtn').onclick = function () { adjust('sub'); };
+
+})();
+</script>
+</body>
+</html>

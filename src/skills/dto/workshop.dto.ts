@@ -1,11 +1,63 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
+import { MAX_INTERNSHIP_MONTHS, MIN_INTERNSHIP_MONTHS } from '../internship-schedule';
+
+/** How long the internship runs. Used when creating the workshop and by PUT /duration. */
+export class InternshipDurationDto {
+  // "self_paced" = keep the current open-ended internship; "timeframe" = a fixed number of months with daily check-ins.
+  @IsIn(['self_paced', 'timeframe'], { message: 'durationMode must be "self_paced" or "timeframe".' })
+  durationMode: 'self_paced' | 'timeframe';
+
+  // Required for "timeframe": how many months the internship lasts.
+  @ValidateIf((o) => o.durationMode === 'timeframe')
+  @IsInt({ message: 'months must be a whole number.' })
+  @Min(MIN_INTERNSHIP_MONTHS, { message: `Choose at least ${MIN_INTERNSHIP_MONTHS} month.` })
+  @Max(MAX_INTERNSHIP_MONTHS, { message: `Choose at most ${MAX_INTERNSHIP_MONTHS} months.` })
+  months?: number;
+
+  // The learner's IANA time zone (e.g. "Africa/Lagos"); decides when one check-in day ends. Defaults to UTC.
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  timezone?: string;
+}
 
 export class CreateWorkshopDto {
   // Rebuild the workshop from scratch (wipes progress and supervisor chat). Without it an existing workshop is returned unchanged and nothing is charged.
   @IsOptional()
   @IsBoolean()
   restart?: boolean;
+
+  // Optionally pick the internship duration in the same call (only applied when the workshop is created or restarted).
+  @IsOptional()
+  @IsIn(['self_paced', 'timeframe'], { message: 'durationMode must be "self_paced" or "timeframe".' })
+  durationMode?: 'self_paced' | 'timeframe';
+
+  @ValidateIf((o) => o.durationMode === 'timeframe')
+  @IsInt({ message: 'months must be a whole number.' })
+  @Min(MIN_INTERNSHIP_MONTHS)
+  @Max(MAX_INTERNSHIP_MONTHS)
+  months?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  timezone?: string;
+}
+
+export class InternshipCheckInDto {
+  // How many internship days to open in this check-in. 1 = just today's task; more = work ahead (several days in one day).
+  @IsOptional()
+  @IsInt({ message: 'days must be a whole number.' })
+  @Min(1)
+  @Max(366)
+  days?: number;
+
+  // Optional: refreshes the learner's time zone for the daily check-in.
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  timezone?: string;
 }
 
 export class SubmitWorkshopStepDto {

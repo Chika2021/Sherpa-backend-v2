@@ -130,6 +130,8 @@ nav .cdbtn:hover{background:var(--brand2)}
       <button data-tab="payments" data-roles="SUPER_ADMIN,MANAGEMENT">Payments</button>
       <button data-tab="helpdesk" data-roles="SUPER_ADMIN,ADMIN">Helpdesk<span class="badge hidden" id="tkBadge">0</span></button>
       <button data-tab="system" data-roles="SUPER_ADMIN">App info</button>
+      <button type="button" data-roles="SUPER_ADMIN" id="tokenManagement">Token management</button>
+      <button type="button" data-roles="SUPER_ADMIN" id="userActivity">User activity</button>
       <button class="cdbtn" id="openCountdown" title="Full-screen live user count"><span class="dot on"></span>Countdown</button>
     </nav>
     <span class="muted" id="who"></span>
@@ -250,6 +252,8 @@ async function api(path, opts = {}) {
 function showLogin() { $('#app').classList.add('hidden'); $('#login').classList.remove('hidden'); }
 function logout() { CD.close(true); token = null; me = null; sessionStorage.removeItem('adminToken'); stopStream(); showLogin(); }
 $('#logout').onclick = logout;
+$('#tokenManagement').onclick = () => { location.href = '/admin/tokens.html'; };
+$('#userActivity').onclick = () => { location.href = '/admin/activity.html'; };
 $('#togglePassword').onclick = () => {
   const isVisible = $('#password').type === 'text';
   $('#password').type = isVisible ? 'password' : 'text';

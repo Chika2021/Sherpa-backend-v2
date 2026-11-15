@@ -1,10 +1,17 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { WorkshopService } from './workshop.service';
 import { InternshipDocumentService } from './internship-document.service';
-import { ApplyInternshipDocumentDto, AskWorkshopMentorDto, CreateWorkshopDto, SubmitWorkshopStepDto } from './dto/workshop.dto';
+import {
+  ApplyInternshipDocumentDto,
+  AskWorkshopMentorDto,
+  CreateWorkshopDto,
+  InternshipCheckInDto,
+  InternshipDurationDto,
+  SubmitWorkshopStepDto,
+} from './dto/workshop.dto';
 
 /**
  * AI Workshop on the skill details page: internship-style practical training.
@@ -27,8 +34,30 @@ export class WorkshopController {
 
   // Designs the workshop (all levels + projects). 1 token; returns the existing one for free unless { restart: true }.
   @Post()
+  // Optionally pass { durationMode: 'self_paced' | 'timeframe', months?, timezone? } to pick the internship duration at the same time.
   create(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: CreateWorkshopDto) {
-    return this.workshop.create(userId, id, !!dto.restart);
+    const duration = dto.durationMode ? { durationMode: dto.durationMode, months: dto.months, timezone: dto.timezone } : undefined;
+    return this.workshop.create(userId, id, !!dto.restart, duration);
+  }
+
+  // ---- Internship duration & daily check-ins ----
+  // The duration block (also returned as `duration` by GET /workshop).
+  @Get('duration')
+  duration(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.workshop.getDuration(userId, id);
+  }
+
+  // Keep the open-ended internship ({ durationMode: 'self_paced' }) or fix a number of months ({ durationMode: 'timeframe', months: 1-60 }).
+  // Allowed until the first step has been submitted.
+  @Put('duration')
+  setDuration(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: InternshipDurationDto) {
+    return this.workshop.setDuration(userId, id, { durationMode: dto.durationMode, months: dto.months, timezone: dto.timezone });
+  }
+
+  // Daily check-in: opens the next day's task. { days: 3 } opens three days at once (working ahead). Timeframe internships only.
+  @Post('check-in')
+  checkIn(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: InternshipCheckInDto) {
+    return this.workshop.checkIn(userId, id, dto.days ?? 1, dto.timezone);
   }
 
   // One level/project with its steps and your progress on each.

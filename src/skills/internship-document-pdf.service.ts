@@ -11,6 +11,12 @@ export interface InternshipDocumentData {
   programTitle: string;
   startedAt: Date | null;
   completedAt: Date | null;
+  /** Length of the internship in whole months (null when it was shorter than a month on a self-paced internship). */
+  durationMonths: number | null;
+  /** The same, ready to print: "3 months", "1 month", "under 1 month". */
+  durationLabel: string;
+  /** Number of distinct days the intern checked in (timeframe internships only). */
+  checkInDays: number | null;
   totals: { levels: number; projects: number; steps: number; attempts: number; xp: number; averageScore: number };
   levels: Array<{ title: string; tier: string; steps: number }>;
   projects: Array<{ title: string; role?: string; deliverables: string[]; techStack: string[] }>;
@@ -80,6 +86,9 @@ export class InternshipDocumentPdfService {
       { align: 'center', width: W - (M + 10) * 2, lineGap: 3 },
     );
 
+    // The internship's length: the months the intern committed to (or, self-paced, the time it actually took).
+    doc.fillColor(C.gold).font('Helvetica-Bold').fontSize(13).text(`Internship duration: ${clean(d.durationLabel)}`, M, doc.y + 16, { align: 'center', width: W - M * 2 });
+
     const baseY = H - 210;
     doc.moveTo(M + 20, baseY).lineTo(M + 190, baseY).lineWidth(0.8).stroke(C.rule);
     doc.moveTo(W - M - 190, baseY).lineTo(W - M - 20, baseY).stroke(C.rule);
@@ -119,21 +128,24 @@ export class InternshipDocumentPdfService {
     // Summary box
     doc.moveDown(0.8);
     const top = doc.y;
-    doc.roundedRect(M, top, W, 98, 6).fill(C.soft);
     const rows: Array<[string, string]> = [
       ['Intern', clean(d.learnerName)],
       ['Email', clean(d.learnerEmail)],
       ['Course', clean(d.courseTitle)],
-      ['Duration', `${fmtDate(d.startedAt)} - ${fmtDate(d.completedAt)}`],
+      ['Internship length', clean(d.durationLabel)],
+      ['Active period', `${fmtDate(d.startedAt)} - ${fmtDate(d.completedAt)}`],
+      ...(d.checkInDays !== null ? ([['Daily check-in days', `${d.checkInDays}`]] as Array<[string, string]>) : []),
       ['Document No.', d.documentNumber],
     ];
+    const boxHeight = rows.length * 16 + 18;
+    doc.roundedRect(M, top, W, boxHeight, 6).fill(C.soft);
     let ry = top + 10;
     rows.forEach(([k, v]) => {
       doc.fillColor(C.muted).font('Helvetica').fontSize(9.5).text(k, M + 14, ry, { width: 90 });
       doc.fillColor(C.ink).font('Helvetica-Bold').fontSize(9.5).text(v, M + 110, ry, { width: W - 124 });
       ry += 16;
     });
-    doc.y = top + 108;
+    doc.y = top + boxHeight + 10;
 
     this.heading(doc, 'Results');
     const stats: Array<[string, string]> = [

@@ -29,6 +29,7 @@ import { AdminModule } from './admin/admin.module';
 import { SupportModule } from './support/support.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
 import { TesterModule } from './tester/tester.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { TesterModule } from './tester/tester.module';
     SupportModule,
     ChatbotModule,
     TesterModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

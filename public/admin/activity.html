@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Super Admin · User activity</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#16181d; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --add:#16a34a; --sub:#dc2626; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --card:#181b21; --text:#eceef2; --muted:#9aa3b2; --line:#2a2f38; --accent:#60a5fa; --add:#4ade80; --sub:#f87171; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:20px; margin:0 0 4px; } p.sub { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+  input { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+  input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  button { padding:8px 14px; border:0; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; color:#fff; background:var(--accent); }
+  button.add { background:var(--add); } button.sub { background:var(--sub); }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:10px; align-items:end; flex-wrap:wrap; } .row > div { flex:1; min-width:140px; }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .tablewrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  td.num { font-variant-numeric:tabular-nums; font-weight:600; }
+  .pill { font-size:12px; padding:2px 8px; border-radius:99px; border:1px solid var(--line); color:var(--muted); }
+  .msg { padding:10px 12px; border-radius:8px; margin:12px 0 0; font-size:14px; } .msg.ok { background:rgba(22,163,74,.12); color:var(--add); } .msg.err { background:rgba(220,38,38,.12); color:var(--sub); }
+  .hidden { display:none; } .empty { color:var(--muted); padding:16px 8px; }
+  #panel { border-color:var(--accent); }
+
+  tr.pick { cursor:pointer; } tr.pick:hover td, tr.sel td { background:rgba(37,99,235,.08); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--line); margin-right:6px; } .dot.on { background:var(--add); }
+  .visits { color:var(--muted); font-size:13px; white-space:normal; max-width:340px; }
+  .stats { display:flex; gap:24px; flex-wrap:wrap; margin:4px 0 14px; } .stats b { display:block; font-size:20px; } .stats span { color:var(--muted); font-size:13px; }
+  td.nowrap { white-space:nowrap; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div><h1>User activity</h1><p class="sub">Who logged in each day, when, and how long they stayed in the app</p></div>
+    <button id="back" class="ghost" type="button">&larr; Back</button>
+  </div>
+
+  <section id="nosession" class="card hidden">
+    <strong>Checking your super admin session…</strong>
+    <p class="sub" id="nsText" style="margin:6px 0 12px">One moment.</p>
+    <button id="nsBack" type="button">Back to the dashboard</button>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="card tablewrap">
+      <strong>Last 14 days</strong>
+      <table style="margin-top:8px"><thead><tr><th>Day</th><th>Users</th><th>Visits</th><th>Total time</th><th>Avg per visit</th></tr></thead><tbody id="days"></tbody></table>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div><label for="date">Day</label><input id="date" type="date"></div>
+        <div><label for="search">Search (email or name)</label><input id="search" type="search" placeholder="Optional"></div>
+      </div>
+      <div id="dayMsg"></div>
+      <div class="stats" style="margin-top:14px">
+        <div><b id="sUsers">0</b><span>users active</span></div>
+        <div><b id="sVisits">0</b><span>visits</span></div>
+        <div><b id="sTime">0m</b><span>total time</span></div>
+        <div><b id="sOnline">0</b><span>online now</span></div>
+      </div>
+      <div class="tablewrap">
+        <table><thead><tr><th>User</th><th>Role</th><th>First login</th><th>Last seen</th><th>Time in app</th><th>Visits</th></tr></thead><tbody id="users"></tbody></table>
+        <div id="empty" class="empty hidden">Nobody was active on this day.</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  var API = '/api/v1';
+  var jwt = null, timer = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  function show(el, on) { el.classList.toggle('hidden', !on); }
+  function msg(el, text, ok) { el.textContent = ''; if (!text) return; var d = document.createElement('div'); d.className = 'msg ' + (ok ? 'ok' : 'err'); d.textContent = text; el.appendChild(d); }
+
+  // Back: return to the dashboard page the admin came from, or to the dashboard home.
+  function goBack() {
+    var sameSite = false;
+    try { sameSite = document.referrer && new URL(document.referrer).origin === location.origin; } catch (e) {}
+    if (sameSite && history.length > 1) history.back(); else location.href = '/admin';
+  }
+  $('back').onclick = goBack; $('nsBack').onclick = goBack;
+
+  function api(path, opts) {
+    opts = opts || {};
+    return fetch(API + path, {
+      method: opts.method || 'GET',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, jwt ? { Authorization: 'Bearer ' + jwt } : {}),
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (r.status === 401 && jwt) { noSession('Your session has expired. Go back to the dashboard and sign in again.'); }
+        if (!r.ok) { var m = data && data.message; throw new Error(Array.isArray(m) ? m.join(', ') : (m || 'Request failed (' + r.status + ')')); }
+        return data;
+      });
+    });
+  }
+
+  // ---- Reuse the dashboard's existing sign-in (same origin, so it shares the browser's storage). ----
+  var JWT_RE = /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/;
+  function pickJwt(value, depth) {
+    if (typeof value === 'string') {
+      if (JWT_RE.test(value)) return [value];
+      if (depth < 2 && /^[\[{]/.test(value.trim())) { try { return pickJwt(JSON.parse(value), depth + 1); } catch (e) {} }
+      return [];
+    }
+    if (value && typeof value === 'object' && depth < 4) {
+      var out = [];
+      Object.keys(value).forEach(function (k) { out = out.concat(pickJwt(value[k], depth + 1)); });
+      return out;
+    }
+    return [];
+  }
+  function candidateTokens() {
+    var found = [];
+    [window.localStorage, window.sessionStorage].forEach(function (st) {
+      try { for (var i = 0; i < st.length; i++) { found = found.concat(pickJwt(st.getItem(st.key(i)), 0)); } } catch (e) {}
+    });
+    return found.filter(function (t, i) { return found.indexOf(t) === i; });
+  }
+  function tryTokens(list) {
+    if (!list.length) return Promise.reject(new Error('none'));
+    jwt = list[0];
+    return fetch(API + '/dashboard/me', { headers: { Authorization: 'Bearer ' + jwt } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('bad')); })
+      .then(function (res) { if (res.user && res.user.role === 'SUPER_ADMIN') return; throw new Error('not super admin'); })
+      .catch(function () { jwt = null; return tryTokens(list.slice(1)); });
+  }
+  function noSession(text) {
+    jwt = null;
+    show($('app'), false); show($('nosession'), true);
+    $('nsText').textContent = text || 'No super admin session was found. Go back to the dashboard, sign in there, then open Token management again.';
+  }
+
+  var TZ = (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; } })();
+  var tzq = TZ ? '&tz=' + encodeURIComponent(TZ) : '';
+  var chosen = '';
+
+  function fmtMin(m) { m = Math.round(m); if (m < 1) return '<1m'; if (m < 60) return m + 'm'; return Math.floor(m / 60) + 'h ' + (m % 60) + 'm'; }
+  function td(text, cls) { var c = document.createElement('td'); c.textContent = text; if (cls) c.className = cls; return c; }
+
+  function loadDays() {
+    api('/admin/activity/daily?x=1' + tzq).then(function (res) {
+      var body = $('days'); body.textContent = '';
+      res.days.forEach(function (d) {
+        var tr = document.createElement('tr'); tr.className = 'pick' + (d.date === chosen ? ' sel' : '');
+        tr.appendChild(td(d.date, 'nowrap')); tr.appendChild(td(String(d.uniqueUsers), 'num')); tr.appendChild(td(String(d.sessions), 'num'));
+        tr.appendChild(td(fmtMin(d.totalMinutes), 'num')); tr.appendChild(td(d.sessions ? fmtMin(d.avgMinutesPerSession) : '—', 'num'));
+        tr.onclick = function () { $('date').value = d.date; loadDay(); };
+        body.appendChild(tr);
+      });
+      if (!chosen && res.days.length) { chosen = res.days[0].date; $('date').value = chosen; loadDay(); }
+    }).catch(function (e) { msg($('dayMsg'), e.message); });
+  }
+
+  function loadDay() {
+    var date = $('date').value; if (!date) return; chosen = date; msg($('dayMsg'), '');
+    var q = '/admin/activity/day?date=' + encodeURIComponent(date) + tzq + ($('search').value.trim() ? '&search=' + encodeURIComponent($('search').value.trim()) : '');
+    api(q).then(function (res) {
+      $('sUsers').textContent = res.totals.uniqueUsers; $('sVisits').textContent = res.totals.sessions;
+      $('sTime').textContent = fmtMin(res.totals.totalMinutes); $('sOnline').textContent = res.totals.onlineNow;
+      var body = $('users'); body.textContent = ''; show($('empty'), res.users.length === 0);
+      res.users.forEach(function (u) {
+        var tr = document.createElement('tr');
+        var c = document.createElement('td'); var dot = document.createElement('span'); dot.className = 'dot' + (u.online ? ' on' : ''); dot.title = u.online ? 'Online now' : 'Offline';
+        c.appendChild(dot); c.appendChild(document.createTextNode(u.name === u.email ? u.email : u.name + ' · ' + u.email)); tr.appendChild(c);
+        var r = document.createElement('td'); var p = document.createElement('span'); p.className = 'pill'; p.textContent = u.role; r.appendChild(p); tr.appendChild(r);
+        tr.appendChild(td(u.firstLoginTime || '—', 'num')); tr.appendChild(td(u.lastSeenTime || '—', 'num'));
+        tr.appendChild(td(u.totalDuration, 'num'));
+        var v = document.createElement('td'); v.className = 'visits';
+        v.textContent = u.sessionCount + (u.sessionCount === 1 ? ' visit: ' : ' visits: ') + u.sessions.map(function (s) { return s.loginTime + '–' + s.leftTime + ' (' + s.duration + ')'; }).join(', ');
+        tr.appendChild(v); body.appendChild(tr);
+      });
+      loadDaysHighlight();
+    }).catch(function (e) { msg($('dayMsg'), e.message); });
+  }
+  function loadDaysHighlight() { Array.prototype.forEach.call($('days').children, function (tr) { tr.classList.toggle('sel', tr.firstChild.textContent === chosen); }); }
+
+  $('date').onchange = loadDay;
+  $('search').oninput = function () { clearTimeout(timer); timer = setTimeout(loadDay, 300); };
+
+  function enterApp() { show($('nosession'), false); show($('app'), true); loadDays(); }
+
+  show($('nosession'), true);
+  tryTokens(candidateTokens()).then(enterApp).catch(function () { noSession(); });
+})();
+</script>
+</body>
+</html>

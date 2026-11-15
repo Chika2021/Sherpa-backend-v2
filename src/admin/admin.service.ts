@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThanOrEqual, QueryFailedError, Repository } from 'typeorm';
@@ -37,6 +37,8 @@ const PROFILE_FIELDS = ['firstName', 'lastName', 'phone', 'location', 'linkedinU
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private config: ConfigService,
     private tokens: TokensService,
@@ -389,15 +391,41 @@ export class AdminService {
     return { deleted: true, id, email: user.email };
   }
 
+  /** Adds tokens to an account. Recorded in the token ledger as an ADJUSTMENT. */
   async grantTokens(actor: Actor, id: string, amount: number, note?: string) {
     await this.requireManageable(actor, id);
     if (!Number.isFinite(amount) || amount <= 0 || amount > 100_000) {
       throw new BadRequestException('Amount must be a positive number (max 100,000).');
     }
-    return this.tokens.credit(id, amount, {
+    const result = await this.tokens.credit(id, amount, {
       entryType: 'ADJUSTMENT',
       label: (note?.trim() || 'admin-grant').slice(0, 120),
     });
+    this.logger.log(`${actor.role} ${actor.id} added ${amount} token(s) to ${id}; balance now ${result.balanceAfter}.`);
+    return result;
+  }
+
+  /**
+   * Takes tokens away from an account. Recorded in the token ledger as a negative ADJUSTMENT (not as
+   * "usage", so the tokens-spent statistics stay about real AI usage). Refused if it would take the
+   * balance below zero - the message says what the account actually has.
+   */
+  async deductTokens(actor: Actor, id: string, amount: number, note?: string) {
+    const user = await this.requireManageable(actor, id);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 100_000) {
+      throw new BadRequestException('Amount must be a positive number (max 100,000).');
+    }
+    const balance = Number(user.tokens);
+    if (amount > balance) {
+      throw new BadRequestException(`This account only has ${balance} token${balance === 1 ? '' : 's'}, so ${amount} can't be removed.`);
+    }
+    // TokensService re-checks under a row lock, so a charge landing at the same moment can't push it negative.
+    const result = await this.tokens.debit(id, amount, {
+      entryType: 'ADJUSTMENT',
+      label: (note?.trim() || 'admin-deduction').slice(0, 120),
+    });
+    this.logger.log(`${actor.role} ${actor.id} removed ${amount} token(s) from ${id}; balance now ${result.balanceAfter}.`);
+    return result;
   }
 
   // ---------------------------------------------------------------- payments (SUPER_ADMIN + MANAGEMENT)

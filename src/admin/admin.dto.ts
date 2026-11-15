@@ -52,3 +52,9 @@ export class GrantTokensDto {
   @Type(() => Number) @IsNumber() @Min(0.01) @Max(100_000) amount: number;
   @IsOptional() @IsString() @MaxLength(120) note?: string;
 }
+
+/** Take tokens away from an account (a correction or clawback). The amount is always positive; the endpoint decides the direction. */
+export class DeductTokensDto {
+  @Type(() => Number) @IsNumber() @Min(0.01) @Max(100_000) amount: number;
+  @IsOptional() @IsString() @MaxLength(120) note?: string;
+}

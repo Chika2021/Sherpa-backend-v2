@@ -16,14 +16,39 @@ import { GeminiService } from '../ai/gemini.service';
 import { WORKSHOP_PASS_SCORE, WorkshopPlan, WorkshopStep, WorkshopUnit } from '../ai/workshop.prompts';
 import { ownedBy } from '../database/db-utils';
 import { appendKeepingLast, updateLockedRow } from '../database/locked-row.util';
+import {
+  InternshipCheckIn,
+  InternshipSchedule,
+  MAX_INTERNSHIP_MONTHS,
+  MAX_STORED_CHECK_INS,
+  MIN_INTERNSHIP_MONTHS,
+  addMonthsKey,
+  dateKey,
+  dayOfStep,
+  daysBetweenKeys,
+  isValidTimeZone,
+  planDays,
+  stepsUnlockedBy,
+  DAYS_PER_MONTH,
+} from './internship-schedule';
 
 const MAX_STORED_CHAT_MESSAGES = 150;
 
 export type StepStatus = 'locked' | 'current' | 'passed';
 export type UnitStatus = 'locked' | 'available' | 'in_progress' | 'completed';
 
+/** Why a step is locked: the step before it is not passed yet, or its internship day has not been opened by a check-in. */
+type StepLockReason = 'previous_step' | 'check_in';
+
+export interface InternshipDurationInput {
+  durationMode: 'self_paced' | 'timeframe';
+  months?: number;
+  timezone?: string;
+}
+
 interface StepProgress {
   status: StepStatus;
+  lockedBy?: StepLockReason;
   attemptCount: number;
   bestScore: number | null;
   lastScore: number | null;
@@ -39,6 +64,7 @@ interface StepProgress {
  *
  * Rules live here, not in the model:
  *  - steps unlock one at a time - a step opens when the one before it is passed;
+ *  - on a timeframe internship a step also needs its internship day opened by a check-in (see internship-schedule.ts);
  *  - a unit opens when the unit before it is completed (projects need ALL levels done);
  *  - a submission passes at WORKSHOP_PASS_SCORE or above, and can be retried forever;
  *  - progress is derived from the append-only attempts list, so it can never drift from it.
@@ -83,7 +109,11 @@ export class WorkshopService {
 
   // ---- progress (derived from attempts) ----
 
-  private stepProgress(unit: WorkshopUnit, attempts: WorkshopAttempt[]): StepProgress[] {
+  /**
+   * `offset` = how many steps come before this unit in the whole internship; `limit` = how many steps
+   * (counted from the start of the internship) the learner's check-ins have opened (Infinity = no calendar).
+   */
+  private stepProgress(unit: WorkshopUnit, attempts: WorkshopAttempt[], offset = 0, limit = Infinity): StepProgress[] {
     const mine = attempts.filter((a) => a.unitId === unit.id);
     const total = unit.steps?.length ?? unit.outline.length;
     const result: StepProgress[] = [];
@@ -93,9 +123,11 @@ export class WorkshopService {
       const forStep = mine.filter((a) => a.stepIndex === i);
       const last = forStep[forStep.length - 1];
       const passed = forStep.some((a) => a.passed);
-      const status: StepStatus = passed ? 'passed' : previousPassed && unit.steps ? 'current' : 'locked';
+      const notCheckedIn = !passed && offset + i >= limit;
+      const status: StepStatus = passed ? 'passed' : !notCheckedIn && previousPassed && unit.steps ? 'current' : 'locked';
       result.push({
         status,
+        ...(status === 'locked' ? { lockedBy: (notCheckedIn ? 'check_in' : 'previous_step') as StepLockReason } : {}),
         attemptCount: forStep.length,
         bestScore: forStep.length ? Math.max(...forStep.map((a) => a.score)) : null,
         lastScore: last ? last.score : null,
@@ -108,12 +140,14 @@ export class WorkshopService {
     return result;
   }
 
-  private unitStates(plan: WorkshopPlan, attempts: WorkshopAttempt[]) {
+  private unitStates(plan: WorkshopPlan, attempts: WorkshopAttempt[], limit = Infinity) {
     let previousCompleted = true;
     let levelsAllCompleted = true;
+    let offset = 0;
 
     return plan.units.map((unit) => {
-      const steps = this.stepProgress(unit, attempts);
+      const steps = this.stepProgress(unit, attempts, offset, limit);
+      offset += unit.outline.length;
       const passedCount = steps.filter((s) => s.status === 'passed').length;
       const completed = steps.length > 0 && passedCount === steps.length;
       // Levels open one after another; the first project also needs EVERY level done, later projects the project before.
@@ -130,8 +164,8 @@ export class WorkshopService {
     });
   }
 
-  private summarize(plan: WorkshopPlan, attempts: WorkshopAttempt[]) {
-    const states = this.unitStates(plan, attempts);
+  private summarize(plan: WorkshopPlan, attempts: WorkshopAttempt[], limit = Infinity) {
+    const states = this.unitStates(plan, attempts, limit);
     const totalSteps = states.reduce((n, s) => n + s.steps.length, 0);
     const passedSteps = states.reduce((n, s) => n + s.passedCount, 0);
     const xp = states.reduce(
@@ -168,7 +202,8 @@ export class WorkshopService {
     if (!record.workshop?.units?.length) return { created: false as const };
 
     const plan = record.workshop;
-    const { states, progress } = this.summarize(plan, record.workshopAttempts ?? []);
+    const attempts = record.workshopAttempts ?? [];
+    const { states, progress } = this.summarize(plan, attempts, this.stepLimit(record, plan));
 
     return {
       created: true as const,
@@ -177,6 +212,7 @@ export class WorkshopService {
       tagline: plan.tagline,
       passScore: WORKSHOP_PASS_SCORE,
       progress,
+      duration: this.durationView(record, plan, attempts),
       levels: states.filter((s) => s.unit.kind === 'level').map((s) => this.unitCard(s)),
       projects: states.filter((s) => s.unit.kind === 'project').map((s) => this.unitCard(s)),
     };
@@ -203,9 +239,11 @@ export class WorkshopService {
   }
 
   /** Designs the workshop (outline of all levels + projects). Idempotent unless `restart`; costs 1 token when it generates. */
-  async create(userId: string, id: string, restart = false) {
+  async create(userId: string, id: string, restart = false, duration?: InternshipDurationInput) {
     const record = await this.load(userId, id);
     if (record.workshop?.units?.length && !restart) return this.getOverview(userId, id);
+    // Validate the duration choice BEFORE the (billed) plan generation, so a bad request costs nothing.
+    if (duration) this.assertDurationInput(duration);
 
     const plan = await this.gemini.generateWorkshopPlan(userId, {
       title: record.title,
@@ -214,12 +252,229 @@ export class WorkshopService {
       modules: record.modules,
     });
 
+    // A (re)built internship starts with a fresh schedule: the chosen duration, or nothing chosen yet.
+    const schedule = duration ? this.buildSchedule(plan, duration) : null;
     await updateLockedRow(this.dataSource, SkillTutorial, { id: record.id, userId }, [], () => ({
       workshop: plan,
       workshopAttempts: [],
       workshopChat: [],
+      internshipSchedule: schedule,
     }));
     return this.getOverview(userId, id);
+  }
+
+  // ---- internship duration & daily check-ins ----
+
+  private flatSteps(plan: WorkshopPlan): Array<{ unitId: string; stepIndex: number; title: string }> {
+    return plan.units.flatMap((u) => u.outline.map((o, i) => ({ unitId: u.id, stepIndex: i, title: u.steps?.[i]?.title || o.title })));
+  }
+
+  private scheduleTotals(plan: WorkshopPlan, months: number) {
+    const totalSteps = plan.units.reduce((n, u) => n + u.outline.length, 0);
+    return { totalSteps, totalDays: planDays(totalSteps, months) };
+  }
+
+  /** How many steps (from the start) the learner's check-ins have opened. Infinity when there is no calendar. */
+  private stepLimit(record: SkillTutorial, plan: WorkshopPlan): number {
+    const s = record.internshipSchedule;
+    if (s?.mode !== 'timeframe' || !s.months) return Infinity;
+    const { totalSteps, totalDays } = this.scheduleTotals(plan, s.months);
+    return stepsUnlockedBy(s.daysUnlocked, totalSteps, totalDays);
+  }
+
+  /** Where the first step of a unit sits in the whole internship (0-based). */
+  private unitOffset(plan: WorkshopPlan, unitIndex: number): number {
+    return plan.units.slice(0, unitIndex).reduce((n, u) => n + u.outline.length, 0);
+  }
+
+  private assertDurationInput(input: InternshipDurationInput) {
+    if (input.timezone !== undefined && !isValidTimeZone(input.timezone)) {
+      throw new BadRequestException('That time zone is not recognised. Use an IANA name such as "Africa/Lagos".');
+    }
+    if (
+      input.durationMode === 'timeframe' &&
+      !(Number.isInteger(input.months) && (input.months as number) >= MIN_INTERNSHIP_MONTHS && (input.months as number) <= MAX_INTERNSHIP_MONTHS)
+    ) {
+      throw new BadRequestException(`Choose a whole number of months between ${MIN_INTERNSHIP_MONTHS} and ${MAX_INTERNSHIP_MONTHS}.`);
+    }
+  }
+
+  private buildSchedule(plan: WorkshopPlan, input: InternshipDurationInput): InternshipSchedule {
+    this.assertDurationInput(input);
+    const timezone = input.timezone && isValidTimeZone(input.timezone) ? input.timezone : 'UTC';
+    const base = { timezone, startedAt: new Date().toISOString(), daysUnlocked: 0, checkIns: [] as InternshipCheckIn[] };
+    if (input.durationMode === 'self_paced') return { mode: 'self_paced', months: null, ...base };
+    if (!plan.units.some((u) => u.outline.length)) throw new BadRequestException('The internship has no steps to schedule.');
+    return { mode: 'timeframe', months: input.months as number, ...base };
+  }
+
+  private passedKeys(attempts: WorkshopAttempt[]): Set<string> {
+    return new Set(attempts.filter((a) => a.passed).map((a) => `${a.unitId}:${a.stepIndex}`));
+  }
+
+  /** Steps that are open (checked in) but not passed yet. */
+  private openTasks(plan: WorkshopPlan, attempts: WorkshopAttempt[], limit: number) {
+    const passed = this.passedKeys(attempts);
+    return this.flatSteps(plan)
+      .map((s, g) => ({ ...s, global: g }))
+      .filter((s) => s.global < limit && !passed.has(`${s.unitId}:${s.stepIndex}`));
+  }
+
+  /** The duration block of the overview: what was chosen and, for a timeframe, where the learner stands today. */
+  private durationView(record: SkillTutorial, plan: WorkshopPlan, attempts: WorkshopAttempt[]) {
+    const s = record.internshipSchedule;
+    // Duration can be (re)chosen until the first step has been submitted.
+    const canChange = attempts.length === 0;
+    if (!s) return { chosen: false, mode: 'self_paced' as const, canChange };
+    if (s.mode !== 'timeframe' || !s.months) return { chosen: true, mode: 'self_paced' as const, canChange };
+
+    const { totalSteps, totalDays } = this.scheduleTotals(plan, s.months);
+    const limit = stepsUnlockedBy(s.daysUnlocked, totalSteps, totalDays);
+    const today = dateKey(new Date(), s.timezone);
+    const startKey = dateKey(new Date(s.startedAt), s.timezone);
+    const endKey = addMonthsKey(startKey, s.months);
+    const elapsedDays = Math.max(0, daysBetweenKeys(startKey, today));
+    const expectedDay = Math.min(totalDays, Math.floor((elapsedDays * totalDays) / (s.months * DAYS_PER_MONTH)) + 1);
+
+    const flat = this.flatSteps(plan);
+    const passed = this.passedKeys(attempts);
+    const dayDone = new Array<boolean>(totalDays + 1).fill(true);
+    flat.forEach((f, g) => {
+      if (!passed.has(`${f.unitId}:${f.stepIndex}`)) dayDone[dayOfStep(g, totalSteps, totalDays)] = false;
+    });
+    const daysCompleted = dayDone.slice(1).filter(Boolean).length;
+
+    const tasks = this.openTasks(plan, attempts, limit).map((t) => ({
+      day: dayOfStep(t.global, totalSteps, totalDays),
+      unitId: t.unitId,
+      stepIndex: t.stepIndex,
+      title: t.title,
+    }));
+    const nextDay = s.daysUnlocked < totalDays ? s.daysUnlocked + 1 : null;
+    const nextDayTasks = nextDay
+      ? flat
+          .map((f, g) => ({ ...f, day: dayOfStep(g, totalSteps, totalDays) }))
+          .filter((f) => f.day === nextDay)
+          .map(({ unitId, stepIndex, title }) => ({ unitId, stepIndex, title }))
+      : [];
+
+    const checkedInToday = s.checkIns.some((c) => c.date === today);
+    const allOpen = s.daysUnlocked >= totalDays;
+    const mustFinishFirst = checkedInToday && tasks.length > 0;
+
+    return {
+      chosen: true,
+      mode: 'timeframe' as const,
+      canChange,
+      months: s.months,
+      timezone: s.timezone,
+      startDate: startKey,
+      endDate: endKey,
+      daysLeft: Math.max(0, daysBetweenKeys(today, endKey)),
+      totalDays,
+      daysUnlocked: s.daysUnlocked,
+      daysCompleted,
+      expectedDay,
+      // > 0 means the learner has opened fewer days than the plan expects by today.
+      daysBehind: Math.max(0, expectedDay - s.daysUnlocked),
+      checkedInToday,
+      checkInDays: new Set(s.checkIns.map((c) => c.date)).size,
+      canCheckIn: !allOpen && !mustFinishFirst,
+      checkInBlockedReason: allOpen ? 'all_days_open' : mustFinishFirst ? 'finish_open_tasks' : null,
+      maxDaysToOpen: totalDays - s.daysUnlocked,
+      tasks: tasks.slice(0, 50),
+      nextDay,
+      nextDayTasks,
+    };
+  }
+
+  /**
+   * Choose how the internship runs: keep it open-ended ("self_paced") or fix a number of months ("timeframe").
+   * Allowed until the learner submits their first step - after that the plan is locked in.
+   */
+  async setDuration(userId: string, id: string, input: InternshipDurationInput) {
+    const record = await this.load(userId, id);
+    const plan = this.requirePlan(record);
+    const schedule = this.buildSchedule(plan, input);
+
+    await updateLockedRow<{ workshopAttempts: any[] | null }>(
+      this.dataSource,
+      SkillTutorial,
+      { id: record.id, userId },
+      ['workshopAttempts'],
+      (row) => {
+        if ((row.workshopAttempts ?? []).length) {
+          throw new ForbiddenException('The internship duration can only be changed before you submit your first step.');
+        }
+        return { internshipSchedule: schedule };
+      },
+    );
+    return { duration: this.durationView({ ...record, internshipSchedule: schedule } as SkillTutorial, plan, []) };
+  }
+
+  /** The current duration block (same as `duration` in the overview). */
+  async getDuration(userId: string, id: string) {
+    const record = await this.load(userId, id);
+    const plan = this.requirePlan(record);
+    return { duration: this.durationView(record, plan, record.workshopAttempts ?? []) };
+  }
+
+  /**
+   * Daily check-in: opens the next internship day (the day's task). `days` > 1 opens several days at once
+   * ("working ahead"). A second check-in on the same calendar day is only allowed once everything already open is passed.
+   */
+  async checkIn(userId: string, id: string, days = 1, timezone?: string) {
+    const record = await this.load(userId, id);
+    const plan = this.requirePlan(record);
+    const current = record.internshipSchedule;
+    if (current?.mode !== 'timeframe' || !current.months) {
+      throw new BadRequestException('Daily check-ins only apply when the internship has a time frame. Set one first.');
+    }
+    if (timezone !== undefined && !isValidTimeZone(timezone)) {
+      throw new BadRequestException('That time zone is not recognised. Use an IANA name such as "Africa/Lagos".');
+    }
+
+    const attempts = record.workshopAttempts ?? [];
+    const { totalSteps, totalDays } = this.scheduleTotals(plan, current.months);
+    const now = new Date();
+    let opened = 0;
+
+    await updateLockedRow<{ internshipSchedule: InternshipSchedule | null }>(
+      this.dataSource,
+      SkillTutorial,
+      { id: record.id, userId },
+      ['internshipSchedule'],
+      (row) => {
+        const cur = row.internshipSchedule;
+        if (cur?.mode !== 'timeframe' || !cur.months) throw new BadRequestException('Daily check-ins only apply when the internship has a time frame.');
+        const tz = timezone ?? cur.timezone;
+        const today = dateKey(now, tz);
+
+        if (cur.daysUnlocked >= totalDays) throw new BadRequestException('Every day of your internship is already open.');
+        if (cur.checkIns.some((c) => c.date === today)) {
+          const limit = stepsUnlockedBy(cur.daysUnlocked, totalSteps, totalDays);
+          if (this.openTasks(plan, attempts, limit).length) {
+            throw new BadRequestException("You've already checked in today. Finish the tasks that are open and you can open more days.");
+          }
+        }
+
+        opened = Math.min(Math.max(1, Math.floor(days)), totalDays - cur.daysUnlocked);
+        const after = cur.daysUnlocked + opened;
+        const entry: InternshipCheckIn = { at: now.toISOString(), date: today, daysOpened: opened, daysUnlockedAfter: after };
+        return {
+          internshipSchedule: { ...cur, timezone: tz, daysUnlocked: after, checkIns: appendKeepingLast(cur.checkIns, [entry], MAX_STORED_CHECK_INS) },
+        };
+      },
+    );
+
+    const fresh = await this.load(userId, id);
+    return { opened, duration: this.durationView(fresh, plan, fresh.workshopAttempts ?? []) };
+  }
+
+  private lockedStepMessage(progress: StepProgress): string {
+    return progress.lockedBy === 'check_in'
+      ? 'This task belongs to a day you have not opened yet. Check in to unlock it.'
+      : 'Pass the previous step first - each step builds on the one before it.';
   }
 
   /**
@@ -231,7 +486,12 @@ export class WorkshopService {
     const plan = this.requirePlan(record);
     const { unit } = this.requireUnit(plan, unitId);
     const attempts = record.workshopAttempts ?? [];
-    const state = this.unitStates(plan, attempts).find((s) => s.unit.id === unitId)!;
+    const state = this.unitStates(plan, attempts, this.stepLimit(record, plan)).find((s) => s.unit.id === unitId)!;
+    const timeframe = record.internshipSchedule?.mode === 'timeframe' ? record.internshipSchedule : null;
+    const totals = timeframe?.months ? this.scheduleTotals(plan, timeframe.months) : null;
+    const offset = this.unitOffset(plan, plan.units.findIndex((u) => u.id === unitId));
+    // The internship day a step belongs to (timeframe internships only).
+    const dayOf = (index: number) => (totals ? { dayNumber: dayOfStep(offset + index, totals.totalSteps, totals.totalDays) } : {});
 
     const card = this.unitCard(state);
     if (state.status === 'locked') {
@@ -243,11 +503,12 @@ export class WorkshopService {
       const unlocked = p.status !== 'locked';
       // A locked step shows only its title and phase, so the learner works through the guide in order rather than skipping ahead.
       if (!unlocked) {
-        return { stepIndex: index, title: step.title, phase: step.phase, status: p.status };
+        return { stepIndex: index, title: step.title, phase: step.phase, status: p.status, lockedReason: this.lockedStepMessage(p), ...dayOf(index) };
       }
       return {
         stepIndex: index,
         status: p.status,
+        ...dayOf(index),
         ...step,
         attemptCount: p.attemptCount,
         bestScore: p.bestScore,
@@ -278,9 +539,12 @@ export class WorkshopService {
     const plan = this.requirePlan(record);
     const { unit, unitIndex } = this.requireUnit(plan, unitId);
     const attempts = record.workshopAttempts ?? [];
-    const states = this.unitStates(plan, attempts);
+    const limit = this.stepLimit(record, plan);
+    const states = this.unitStates(plan, attempts, limit);
 
     if (states[unitIndex].status === 'locked') throw new ForbiddenException(this.lockedReason(unit));
+    // On a timeframe internship a section opens once the check-in for its first task has been done.
+    if (this.unitOffset(plan, unitIndex) >= limit) throw new ForbiddenException('This section starts on a day you have not opened yet. Check in to unlock it.');
 
     if (!unit.steps?.length) {
       const completedUnitTitles = states.filter((s) => s.completed).map((s) => s.unit.title);
@@ -316,13 +580,14 @@ export class WorkshopService {
     const plan = this.requirePlan(record);
     const { unit, unitIndex } = this.requireUnit(plan, unitId);
     const attempts = record.workshopAttempts ?? [];
-    const states = this.unitStates(plan, attempts);
+    const limit = this.stepLimit(record, plan);
+    const states = this.unitStates(plan, attempts, limit);
     const state = states[unitIndex];
 
     if (state.status === 'locked') throw new ForbiddenException(this.lockedReason(unit));
     const step = this.requireStep(unit, stepIndex);
     const progress = state.steps[stepIndex];
-    if (progress.status === 'locked') throw new ForbiddenException('Pass the previous step first - each step builds on the one before it.');
+    if (progress.status === 'locked') throw new ForbiddenException(this.lockedStepMessage(progress));
 
     const wasPassed = progress.status === 'passed';
     const review = await this.gemini.reviewWorkshopStep(userId, {
@@ -358,7 +623,7 @@ export class WorkshopService {
       (row) => ({ workshopAttempts: [...(row.workshopAttempts ?? []), attempt] }),
     );
 
-    const after = this.summarize(plan, [...attempts, attempt]);
+    const after = this.summarize(plan, [...attempts, attempt], limit);
     const afterUnit = after.states[unitIndex];
     const total = afterUnit.steps.length;
 
@@ -415,12 +680,12 @@ export class WorkshopService {
     const plan = this.requirePlan(record);
     const { unit, unitIndex } = this.requireUnit(plan, unitId);
     const attempts = record.workshopAttempts ?? [];
-    const state = this.unitStates(plan, attempts)[unitIndex];
+    const state = this.unitStates(plan, attempts, this.stepLimit(record, plan))[unitIndex];
 
     if (state.status === 'locked') throw new ForbiddenException(this.lockedReason(unit));
     const step = this.requireStep(unit, stepIndex);
     const progress = state.steps[stepIndex];
-    if (progress.status === 'locked') throw new ForbiddenException('That step is still locked.');
+    if (progress.status === 'locked') throw new ForbiddenException(progress.lockedBy === 'check_in' ? this.lockedStepMessage(progress) : 'That step is still locked.');
 
     const history = (record.workshopChat ?? [])
       .filter((m) => m.unitId === unitId && m.stepIndex === stepIndex)
@@ -475,7 +740,7 @@ export class WorkshopService {
     const record = await this.load(userId, id);
     const plan = record.workshop?.units?.length ? record.workshop : null;
     const attempts = record.workshopAttempts ?? [];
-    const summary = plan ? this.summarize(plan, attempts) : null;
+    const summary = plan ? this.summarize(plan, attempts, this.stepLimit(record, plan)) : null;
     return { record, plan, attempts, summary, finished: !!summary?.progress.finished };
   }
 
@@ -504,6 +769,7 @@ export class WorkshopService {
     const record = await this.load(userId, id, q.kind === 'mentor');
     const plan = this.requirePlan(record);
     const attempts = record.workshopAttempts ?? [];
+    const limit = this.stepLimit(record, plan);
     const firstName = await this.firstNameOf(userId);
     const base = `${record.id}:${q.kind}`;
 
@@ -514,13 +780,13 @@ export class WorkshopService {
     }
 
     if (q.kind === 'finish' && !q.unitId) {
-      if (!this.summarize(plan, attempts).progress.finished) throw new ForbiddenException('The internship is not finished yet.');
+      if (!this.summarize(plan, attempts, limit).progress.finished) throw new ForbiddenException('The internship is not finished yet.');
       return { text: loraFinishScript({ firstName, title: record.title, isInternship: true }), refId: `${base}:all` };
     }
 
     if (!q.unitId) throw new BadRequestException('unitId is required.');
     const { unit, unitIndex } = this.requireUnit(plan, q.unitId);
-    const states = this.unitStates(plan, attempts);
+    const states = this.unitStates(plan, attempts, limit);
     if (states[unitIndex].status === 'locked') throw new ForbiddenException(this.lockedReason(unit));
 
     if (q.kind === 'unit') return { text: loraUnitScript(unit, firstName), refId: `${base}:${unit.id}` };

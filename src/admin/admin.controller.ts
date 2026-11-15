@@ -8,14 +8,17 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RealtimeService } from '../realtime/realtime.service';
 import { AdminService } from './admin.service';
 import { AppInfoService } from './app-info.service';
-import { CreateUserDto, GrantTokensDto, ListPaymentsQueryDto, ListUsersQueryDto, UpdateUserDto } from './admin.dto';
+import { ActivityService } from './activity.service';
+import { CreateUserDto, DeductTokensDto, GrantTokensDto, ListPaymentsQueryDto, ListUsersQueryDto, UpdateUserDto } from './admin.dto';
 
 /**
  * Dashboard API. Who can do what:
  *   read overview / signups / live stream / users   ADMIN, MANAGEMENT, SUPER_ADMIN
  *   create, update, delete users                    MANAGEMENT (user/tester/staff only), SUPER_ADMIN
  *   payments (how much was paid, and by whom)       MANAGEMENT, SUPER_ADMIN
- *   grant tokens, App info (/system)                SUPER_ADMIN only
+ *   add / subtract tokens, App info (/system),
+ *   user activity (logins per day, time in app)     SUPER_ADMIN only
+ *   local job boards (create/read/update/delete)    ADMIN, SUPER_ADMIN (see LocalJobBoardsController)
  * STAFF has its own countdown-only endpoints (CountdownController); the helpdesk is in SupportAdminController.
  */
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -26,6 +29,7 @@ export class AdminController {
   constructor(
     private admin: AdminService,
     private appInfo: AppInfoService,
+    private activity: ActivityService,
     private realtime: RealtimeService,
   ) {}
 
@@ -51,6 +55,27 @@ export class AdminController {
   @Get('system')
   system() {
     return this.appInfo.collect();
+  }
+
+  /** Logins per day: unique users, visits and total time in the app. ?from=YYYY-MM-DD&to=YYYY-MM-DD&tz=Africa/Lagos (default: last 14 days). */
+  @Roles('SUPER_ADMIN')
+  @Get('activity/daily')
+  activityDaily(@Query() q: { from?: string; to?: string; tz?: string }) {
+    return this.activity.daily(q);
+  }
+
+  /** Who was in the app on one day: first login time, last seen, time stayed, and every visit. ?date=YYYY-MM-DD&tz=&search=&role= */
+  @Roles('SUPER_ADMIN')
+  @Get('activity/day')
+  activityDay(@Query() q: { date?: string; tz?: string; search?: string; role?: string }) {
+    return this.activity.day(q);
+  }
+
+  /** One user's recent visits (newest first). ?limit=30&tz= */
+  @Roles('SUPER_ADMIN')
+  @Get('users/:id/activity')
+  userActivity(@Param('id') id: string, @Query() q: { limit?: string; tz?: string }) {
+    return this.activity.forUser(id, q);
   }
 
   /**
@@ -105,10 +130,18 @@ export class AdminController {
     return this.admin.deleteUser({ id: actor.id, role: actor.role }, id);
   }
 
+  /** Add tokens to a user. Body: { amount, note? }. */
   @Roles('SUPER_ADMIN')
   @Post('users/:id/tokens')
   grantTokens(@CurrentUser() actor: { id: string; role: string }, @Param('id') id: string, @Body() dto: GrantTokensDto) {
     return this.admin.grantTokens({ id: actor.id, role: actor.role }, id, dto.amount, dto.note);
+  }
+
+  /** Take tokens away from a user. Body: { amount, note? } - amount is positive, it is subtracted. Refused if the balance is too low. */
+  @Roles('SUPER_ADMIN')
+  @Post('users/:id/tokens/deduct')
+  deductTokens(@CurrentUser() actor: { id: string; role: string }, @Param('id') id: string, @Body() dto: DeductTokensDto) {
+    return this.admin.deductTokens({ id: actor.id, role: actor.role }, id, dto.amount, dto.note);
   }
 
   // ---- payments: SUPER_ADMIN and MANAGEMENT ----

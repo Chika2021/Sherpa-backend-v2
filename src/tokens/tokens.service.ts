@@ -223,6 +223,26 @@ export class TokensService {
   }
 
   /**
+   * Removes tokens from a balance WITHOUT it being an AI usage charge (admin correction, clawback of a
+   * mistaken grant...). Written as an ADJUSTMENT so it doesn't show up as "tokens spent" in the usage
+   * numbers. Fails with a BadRequestException if the balance can't cover it - a balance never goes negative.
+   */
+  async debit(
+    userId: string,
+    tokens: number,
+    options: { entryType?: Extract<TokenLedgerEntryType, 'ADJUSTMENT'>; label?: string | null } = {},
+  ): Promise<{ tokensDebited: number; balanceAfter: number }> {
+    if (!Number.isFinite(tokens) || tokens <= 0) {
+      throw new BadRequestException('Token amount must be a positive number');
+    }
+    const balanceAfter = await this.applyDelta(userId, -tokens, {
+      entryType: options.entryType ?? 'ADJUSTMENT',
+      label: options.label ?? null,
+    });
+    return { tokensDebited: tokens, balanceAfter };
+  }
+
+  /**
    * Charges for one AI generation: looks up the feature's cost (1 token for
    * everything, by default) and spends it. Throws BadRequestException if the
    * balance can't cover it - callers that have already paid Google for the

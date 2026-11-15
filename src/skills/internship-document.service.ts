@@ -9,6 +9,7 @@ import { updateLockedRow } from '../database/locked-row.util';
 import { PaymentsService } from '../payments/payments.service';
 import { WorkshopService } from './workshop.service';
 import { InternshipDocumentPdfService } from './internship-document-pdf.service';
+import { durationForCertificate } from './internship-schedule';
 
 const DEFAULT_PRICE_USD = 5;
 const DEFAULT_CUSTOMIZE_EMAIL = 'alphatech2050@gmail.com';
@@ -47,6 +48,15 @@ export class InternshipDocumentService {
     return this.config.get<string>('APP_NAME')?.trim() || 'Sherpar';
   }
 
+  private activityWindow(attempts: Array<{ passed: boolean; attemptedAt: Date | string }>) {
+    const stamps = attempts.map((a) => new Date(a.attemptedAt).getTime());
+    const passStamps = attempts.filter((a) => a.passed).map((a) => new Date(a.attemptedAt).getTime());
+    return {
+      startedAt: stamps.length ? new Date(Math.min(...stamps)) : null,
+      completedAt: passStamps.length ? new Date(Math.max(...passStamps)) : null,
+    };
+  }
+
   /** Where the learner stands: can they apply, have they paid, what is the document number. */
   async status(userId: string, id: string) {
     const snap = await this.workshop.completionSnapshot(userId, id);
@@ -58,7 +68,9 @@ export class InternshipDocumentService {
     }
 
     const doc = snap.record.internshipDocument ?? null;
+    const times = this.activityWindow(snap.attempts);
     return {
+      durationLabel: snap.finished ? durationForCertificate(snap.record.internshipSchedule, times.startedAt, times.completedAt).label : null,
       eligible: snap.finished,
       progressPercent: snap.summary?.progress.percent ?? 0,
       paid: !!paid && snap.finished,
@@ -128,8 +140,10 @@ export class InternshipDocumentService {
     const learnerName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() || (user?.email ?? 'Intern').split('@')[0];
 
     const passed = attempts.filter((a) => a.passed);
-    const stamps = attempts.map((a) => new Date(a.attemptedAt).getTime());
-    const passStamps = passed.map((a) => new Date(a.attemptedAt).getTime());
+    const { startedAt, completedAt } = this.activityWindow(attempts);
+    const schedule = record.internshipSchedule;
+    const duration = durationForCertificate(schedule, startedAt, completedAt);
+    const timeframe = schedule?.mode === 'timeframe' && schedule.months;
     const bestByStep = new Map<string, number>();
     for (const a of passed) bestByStep.set(`${a.unitId}:${a.stepIndex}`, Math.max(bestByStep.get(`${a.unitId}:${a.stepIndex}`) ?? 0, a.score));
     const scores = [...bestByStep.values()];
@@ -142,8 +156,11 @@ export class InternshipDocumentService {
       learnerEmail: user?.email ?? '',
       courseTitle: record.title,
       programTitle: plan.title,
-      startedAt: stamps.length ? new Date(Math.min(...stamps)) : null,
-      completedAt: passStamps.length ? new Date(Math.max(...passStamps)) : null,
+      startedAt,
+      completedAt,
+      durationMonths: duration.months,
+      durationLabel: duration.label,
+      checkInDays: timeframe ? new Set(schedule!.checkIns.map((c) => c.date)).size : null,
       totals: {
         levels: summary.progress.totalLevels,
         projects: summary.progress.totalProjects,

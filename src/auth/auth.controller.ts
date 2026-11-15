@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthService } from './auth.service';
@@ -18,8 +18,30 @@ export class AuthController {
   }
 
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(@Body() dto: LoginDto, @Req() req: any) {
+    return this.authService.login(dto, req);
+  }
+
+  // Dashboard sign-in for TESTER / STAFF / ADMIN / MANAGEMENT / SUPER_ADMIN. Returns `dashboard.path` to redirect to.
+  // SUPER_ADMIN is refused here when the request comes from the frontend app (backend-only account).
+  @Post('admin-login')
+  adminLogin(@Body() dto: LoginDto, @Req() req: any) {
+    return this.authService.adminLogin(dto, req);
+  }
+
+  // Optional, but makes "time spent in the app" exact: call it when the user taps Sign out.
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  logout(@CurrentUser('id') userId: string) {
+    return this.authService.logout(userId);
+  }
+
+  // Optional: the app can ping this about once a minute while it is open and visible. Any authenticated
+  // request already counts as activity - this just keeps the visit alive when the user is only reading.
+  @UseGuards(JwtAuthGuard)
+  @Post('heartbeat')
+  heartbeat() {
+    return { ok: true };
   }
 
   // Update your password while logged in.

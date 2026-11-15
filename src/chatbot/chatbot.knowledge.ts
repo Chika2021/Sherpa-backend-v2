@@ -83,7 +83,7 @@ export const KNOWLEDGE: KnowledgeTopic[] = [
     title: 'Skill courses',
     keywords: ['skill', 'skills', 'learn', 'course', 'tutorial', 'workshop', 'lab', 'video', 'certificate', 'internship document', 'learning'],
     answer:
-      'Skills lets you pick any skill and get a structured tutorial with videos, quizzes, hands-on labs and a guided workshop. You can also unlock a downloadable internship document for a completed course.',
+      'Skills lets you pick any skill and get a structured tutorial with videos, quizzes, hands-on labs and a guided workshop. You can run the internship at your own pace or set it to last a number of months with a daily check-in (you can open several days at once if you want to work ahead). You can also unlock a downloadable internship document for a completed course; it shows how long the internship lasted.',
     path: '/skills',
     linkLabel: 'Explore Skills',
   },

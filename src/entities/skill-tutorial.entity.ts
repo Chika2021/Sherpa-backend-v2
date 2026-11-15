@@ -3,6 +3,7 @@ import type { SkillTutorialModule, SkillCourseGuide, CbtQuestion, LabExercise } 
 import type { AskAiMessage } from '../common/ask-ai.types';
 import type { SkillVideo } from '../ai/skill-video.types';
 import type { WorkshopPlan } from '../ai/workshop.prompts';
+import type { InternshipSchedule } from '../skills/internship-schedule';
 import { SerializableEntity } from './serializable.entity';
 import { User } from './user.entity';
 
@@ -142,6 +143,12 @@ export class SkillTutorial extends SerializableEntity {
   // The learner's conversation with the AI supervisor, across all steps.
   @Column({ type: 'jsonb', default: () => "'[]'", select: false })
   workshopChat: WorkshopChatMessage[];
+
+  // How long the internship runs: null / absent = nothing chosen yet (behaves as self-paced, the original behaviour);
+  // { mode: 'self_paced' } = chosen, no calendar; { mode: 'timeframe', months } = a fixed number of months with daily check-ins.
+  // Small, so it is loaded with the normal course row.
+  @Column({ type: 'jsonb', nullable: true, default: null })
+  internshipSchedule?: InternshipSchedule | null;
 
   // The internship document issued after the learner finished the internship and paid for it.
   // Set once (first download after payment); the number never changes afterwards.

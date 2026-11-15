@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { SessionTrackerService } from './session-tracker.service';
 import { EntitiesModule } from '../entities/entities.module';
 
 @Module({
@@ -20,7 +21,7 @@ import { EntitiesModule } from '../entities/entities.module';
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, SessionTrackerService],
   controllers: [AuthController],
   exports: [JwtModule],
 })
