@@ -5,6 +5,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { configureOutboundNetwork } from './config/outbound-network';
+import { DocumentsService } from './documents/documents.service';
 
 // Node's fetch (undici) tries IPv6 first when a host resolves to both an A
 // and AAAA record (Google's APIs, most CDNs, etc. do). On a lot of cloud
@@ -48,6 +49,20 @@ async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  // Registered before the static file server (which is attached during init), so a generated .docx that has
+  // vanished from the disk is rebuilt from the database before /files tries to serve it.
+  const documents = app.get(DocumentsService);
+  app.use('/files', async (req: any, res: any, next: any) => {
+    try {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+      const parts = decodeURIComponent(String(req.path || '')).split('/').filter(Boolean);
+      if (parts.length === 2) await documents.restoreFileIfMissing(parts[0], parts[1]);
+    } catch {
+      // fall through to the static server, which answers 404
+    }
+    next();
+  });
   app.enableCors();
   app.setGlobalPrefix('api/v1');
 

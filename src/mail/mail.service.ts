@@ -20,7 +20,7 @@ import * as nodemailer from 'nodemailer';
  */
 /** An application email: plain-text body, the applicant as Reply-To, resume / cover letter attached. */
 export interface ApplicationMail {
-  to: string;
+  to: string | string[];
   subject: string;
   text: string;
   applicantName: string;
@@ -163,7 +163,7 @@ If you didn't request this, you can safely ignore this email.`;
       headers: { 'api-key': this.brevoKey!, 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({
         sender: { email: this.fromEmail, name: m.fromName },
-        to: [{ email: m.to }],
+        to: (Array.isArray(m.to) ? m.to : [m.to]).map((email) => ({ email })),
         ...(m.bcc ? { bcc: [{ email: m.bcc }] } : {}),
         replyTo: { email: m.replyTo, name: m.applicantName },
         subject: m.subject,
@@ -182,7 +182,7 @@ If you didn't request this, you can safely ignore this email.`;
       headers: { Authorization: `Bearer ${this.resendKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
         from: `${m.fromName} <${this.fromEmail}>`,
-        to: [m.to],
+        to: Array.isArray(m.to) ? m.to : [m.to],
         ...(m.bcc ? { bcc: [m.bcc] } : {}),
         reply_to: m.replyTo,
         subject: m.subject,

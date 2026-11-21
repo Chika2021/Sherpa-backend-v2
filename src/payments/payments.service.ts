@@ -14,11 +14,11 @@ import { assertValidId } from '../database/db-utils';
 
 /**
  * Buying tokens. The pricing rule is deliberately trivial and lives in one
- * file (src/tokens/token-pricing.config.ts): **$3 buys 5 tokens**, i.e.
- * $0.60 per token, at every bundle size and for custom amounts alike. No
+ * file (src/tokens/token-pricing.config.ts): **$0.75 buys 5 tokens**, i.e.
+ * $0.15 per token, at every bundle size and for custom amounts alike. No
  * bundle discounts, no split between "what you pay" and "what the token is
  * worth" - the price IS the value, and the margin is simply the difference
- * between $0.60 and what a Gemini call actually costs us.
+ * between $0.15 and what a Gemini call actually costs us.
  */
 @Injectable()
 export class PaymentsService {

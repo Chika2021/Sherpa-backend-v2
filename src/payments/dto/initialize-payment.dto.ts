@@ -4,11 +4,11 @@ import { TOKEN_PACKAGE_IDS } from '../../tokens/token-pricing.config';
 /**
  * Exactly one of packageId / tokens / amountUsd is required - they're three
  * ways of asking for the same thing, since every route settles at the same
- * rate ($3 = 5 tokens by default). packageId wins if more than one is sent,
+ * rate ($0.75 = 5 tokens by default). packageId wins if more than one is sent,
  * then tokens, then amountUsd.
  */
 export class InitializePaymentDto {
-  /** One of the bundles from GET /payments/config, e.g. "bundle-1" ($3 / 5 tokens). */
+  /** One of the bundles from GET /payments/config, e.g. "bundle-1" ($0.75 / 5 tokens). */
   @IsOptional()
   @IsString()
   @IsIn(TOKEN_PACKAGE_IDS)

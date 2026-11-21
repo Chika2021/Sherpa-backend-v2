@@ -146,7 +146,12 @@ export class ApplicationsService {
         userId,
         applicationId,
         resume.parsedProfile as any,
-        { id: job.id, title: job.title, company: job.company || 'the company', description: job.description },
+        {
+          id: job.id,
+          title: job.title,
+          company: job.company || 'the company',
+          description: job.location ? `${job.description}\n\nJob location: ${job.location}` : job.description,
+        },
       );
 
       // Also clear out any stale feedback from an earlier failed attempt - once
@@ -446,7 +451,7 @@ export class ApplicationsService {
         documents: docsByApplication.get(a.id) || [],
         // Only for applications made by email: lets the list show "emailed to x" / "draft" without another request.
         ...(email
-          ? { emailApplication: { recipientEmail: email.recipientEmail ?? null, subject: email.subject, status: email.status, sentAt: email.sentAt ?? null } }
+          ? { emailApplication: { recipientEmail: email.recipientEmail ?? null, recipientEmails: email.recipientEmails ?? (email.recipientEmail ? [email.recipientEmail] : []), subject: email.subject, status: email.status, sentAt: email.sentAt ?? null } }
           : {}),
       };
     });

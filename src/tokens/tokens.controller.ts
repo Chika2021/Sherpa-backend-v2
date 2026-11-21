@@ -15,7 +15,7 @@ export class TokensController {
 
   /**
    * Public pricing - safe to show before login. Everything derives from the
-   * one rule: BUNDLE_PRICE_USD buys BUNDLE_TOKENS tokens (default $3 = 5),
+   * one rule: BUNDLE_PRICE_USD buys BUNDLE_TOKENS tokens (default $0.75 = 5),
    * and one AI generation costs one token.
    */
   @Get('pricing')

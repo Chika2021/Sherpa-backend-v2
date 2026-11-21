@@ -524,7 +524,7 @@ export class GeminiService implements OnModuleInit {
    * TokensService: blocks the call up front if the wallet can't cover this
    * feature's cost (so we never pay Google for a response we already know we
    * can't bill for), then spends that cost once the call succeeds. Under the
-   * current pricing ($3 = 5 tokens, see token-pricing.config.ts) every
+   * current pricing ($0.75 = 5 tokens, see token-pricing.config.ts) every
    * feature costs 1 token, so 5 tokens is 5 generations.
    * Every one of this service's ~14 public generation methods funnels
    * through here, so this single chokepoint is what makes "every AI feature

@@ -8,15 +8,21 @@ Nothing is sent without the explicit `send` call.
 
 | Step | Request | Notes |
 |---|---|---|
-| Create | `POST /api/v1/applications/email` `{ jobTitle, jobDescription, requirements?, company?, recipientEmail?, recipientName?, resumeId? }` | 3 tokens (resume + cover letter + email). Returns the application with `documents`, `emailApplication` (subject, body, recipientEmail, status) and `mailConfigured`. |
+| Create | `POST /api/v1/applications/email` `{ jobTitle, jobDescription, requirements?, company?, location?, recipientEmail?, recipientEmails?, recipientName?, resumeId? }` | 3 tokens (resume + cover letter + email). Returns the application with `documents`, `emailApplication` (subject, body, recipientEmail, status) and `mailConfigured`. |
 | View | `GET /applications/email/:id` | Same shape. |
-| Edit | `PATCH /applications/email/:id` `{ recipientEmail?, recipientName?, subject?, body? }` | Blocked once sent. |
+| Edit | `PATCH /applications/email/:id` `{ recipientEmail?, recipientEmails?, recipientName?, subject?, body? }` | Blocked once sent. |
 | Rewrite email | `POST /applications/email/:id/regenerate-email` `{ instructions?, recipientName? }` | 1 token. e.g. "shorter, more formal". |
 | Rewrite documents | `POST /applications/email/:id/regenerate-documents` | 2 tokens. Old versions are removed after the new ones exist. Also the retry path if the first generation failed. |
 | Send | `POST /applications/email/:id/send` `{ recipientEmail?, subject?, body?, sendCopyToMe?, resend? }` | Edits in the body are saved first. Attaches the latest resume + cover letter (.docx). Marks the application SUBMITTED. |
 
 Existing endpoints that changed: `GET /applications` and `GET /applications/:id` now include `emailApplication`
 for applications made this way. `DELETE /applications/:id` removes the email row too.
+
+## Several recipients and job location
+- `recipientEmails` is an array of up to 5 addresses; ONE email (documents attached) goes to all of them, so they all see each
+  other in the To line. `recipientEmail` (single) still works and always mirrors the first address. Duplicates are removed and
+  `PATCH { recipientEmails: [] }` clears the list. Responses include `recipientEmails` on `emailApplication`.
+- `location` (city / country / "Remote") is saved on the job and given to the AI when it writes the resume, cover letter and email.
 
 ## How the email is sent
 - From the app's verified sender (`MAIL_FROM_EMAIL`), shown as "<Applicant> via Sherpar", with **Reply-To set to the applicant**

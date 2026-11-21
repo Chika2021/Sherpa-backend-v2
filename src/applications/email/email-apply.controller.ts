@@ -12,7 +12,7 @@ import {
 /**
  * Apply by email. The `:id` in every route is the APPLICATION id (the same id the Applications list shows).
  *
- *   1. POST  /applications/email                          job title + description + requirements [+ recipientEmail]
+ *   1. POST  /applications/email                          job title + description + requirements [+ location, recipientEmail(s)]
  *                                                          -> application with tailored resume, cover letter and the email draft
  *      GET   /applications/email/:id                       the same view again (also says whether the server can send mail)
  *   2. PATCH /applications/email/:id                       edit recipient / subject / body

@@ -25,7 +25,7 @@ export class User extends SerializableEntity {
   @Column({ type: 'text', nullable: true }) portfolioUrl?: string;
 
   // Wallet balance. Tokens are bought at the rate in
-  // src/tokens/token-pricing.config.ts ($3 = 5 tokens by default) and spent
+  // src/tokens/token-pricing.config.ts ($0.75 = 5 tokens by default) and spent
   // at 1 token per AI generation. New accounts are credited
   // FREE_SIGNUP_TOKENS by AuthService.register, which also writes the
   // matching BONUS ledger row - hence the 0 default here.

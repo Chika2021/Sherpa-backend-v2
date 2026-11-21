@@ -14,7 +14,7 @@ export const TOKEN_LEDGER_ENTRY_TYPES = ['PURCHASE', 'BONUS', 'USAGE', 'REFUND',
 export type TokenLedgerEntryType = (typeof TOKEN_LEDGER_ENTRY_TYPES)[number];
 
 /**
- * The full token ledger under the current billing model ($3 = 5 tokens,
+ * The full token ledger under the current billing model ($0.75 = 5 tokens,
  * 1 token per AI generation - see src/tokens/token-pricing.config.ts).
  *
  * Sign convention: `tokens` and `usdValue` are POSITIVE for credits

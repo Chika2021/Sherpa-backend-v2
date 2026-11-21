@@ -61,10 +61,10 @@ export interface TokenCreditResult {
  * The only place a user's token balance is ever mutated.
  *
  * Billing model (see token-pricing.config.ts - change it there, not here):
- * $3 buys 5 tokens, and one AI generation spends 1 token. That's the entire
+ * $0.75 buys 5 tokens, and one AI generation spends 1 token. That's the entire
  * scheme. There is no token "face value" separate from its price, no
  * purchase-side profit split, and no per-model metering of Google's Gemini
- * bill - a token costs $0.60, and a generation costs a token.
+ * bill - a token costs $0.15, and a generation costs a token.
  *
  * Every mutation runs in one Postgres transaction that locks the user's row
  * (`SELECT ... FOR UPDATE`), checks the funds, updates the balance and writes

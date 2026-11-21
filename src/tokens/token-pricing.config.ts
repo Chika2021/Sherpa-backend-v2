@@ -1,25 +1,25 @@
 /**
  * SINGLE SOURCE OF TRUTH FOR BILLING.
  *
- * The whole pricing model is one sentence: **$3 buys 5 AI tokens**, and one
- * AI generation costs 1 token. That works out to $0.60 per token / per AI
+ * The whole pricing model is one sentence: **$0.75 buys 5 AI tokens**, and one
+ * AI generation costs 1 token. That works out to $0.15 per token / per AI
  * call, and every price in the app is derived from those two numbers - there
  * is no face value, no 50/50 purchase split, and no per-model metering of
  * Google's real Gemini cost anywhere in the codebase any more. If you want to
  * change what users pay, change BUNDLE_PRICE_USD / BUNDLE_TOKENS (here or via
  * env) and every screen, package, and ledger row follows automatically.
  *
- * Bundles are strictly linear multiples of the $3/5 bundle - no bundle
- * discounts - so "$3 for 5 tokens" stays literally true at every size and
+ * Bundles are strictly linear multiples of the $0.75/5 bundle - no bundle
+ * discounts - so "$0.75 for 5 tokens" stays literally true at every size and
  * the buy screen never has to explain a per-bundle rate.
  */
 
 export interface TokenPricing {
-  /** Price of one bundle, in USD. Default 3. */
+  /** Price of one bundle, in USD. Default 0.75. */
   bundlePriceUsd: number;
   /** Tokens granted per bundle. Default 5. */
   bundleTokens: number;
-  /** Derived: bundlePriceUsd / bundleTokens (default $0.60). */
+  /** Derived: bundlePriceUsd / bundleTokens (default $0.15). */
   pricePerTokenUsd: number;
   /** Smallest custom purchase allowed, in tokens (default one full bundle). */
   minPurchaseTokens: number;
@@ -27,13 +27,13 @@ export interface TokenPricing {
   maxPurchaseTokens: number;
 }
 
-export const DEFAULT_BUNDLE_PRICE_USD = 3;
+export const DEFAULT_BUNDLE_PRICE_USD = 0.75;
 export const DEFAULT_BUNDLE_TOKENS = 5;
 export const DEFAULT_MIN_PURCHASE_TOKENS = DEFAULT_BUNDLE_TOKENS;
 export const DEFAULT_MAX_PURCHASE_TOKENS = 10_000;
 
-/** Tokens granted to a brand-new account so it can try the app before paying. */
-export const FREE_SIGNUP_TOKENS = 5;
+/** Free trial tokens granted to every brand-new account so it can try the app before paying. */
+export const FREE_SIGNUP_TOKENS = 10;
 
 /** Rounds a money amount to whole cents without floating-point noise. */
 export function roundUsd(value: number): number {
@@ -56,7 +56,7 @@ export function resolveTokenPricing(read: (key: string) => string | number | und
   return {
     bundlePriceUsd,
     bundleTokens,
-    // 4dp is enough for any sane bundle size and keeps 3/5 exact at 0.6.
+    // 4dp is enough for any sane bundle size and keeps 0.75/5 exact at 0.15.
     pricePerTokenUsd: Math.round((bundlePriceUsd / bundleTokens + Number.EPSILON) * 10000) / 10000,
     minPurchaseTokens,
     maxPurchaseTokens,
@@ -80,7 +80,7 @@ export function tokensForUsd(amountUsd: number, pricing: TokenPricing): number {
 
 /**
  * The buy-screen bundles: plain multiples of the base bundle. `bundles: 1` is
- * the $3 / 5-token bundle itself; the rest just save the user from typing a
+ * the $0.75 / 5-token bundle itself; the rest just save the user from typing a
  * custom amount. Same per-token rate at every size, by design.
  */
 export interface TokenPackageDefinition {
@@ -132,7 +132,7 @@ export function findTokenPackage(id: string, pricing: TokenPricing): ResolvedTok
 /**
  * What each AI feature costs, keyed by the `label` GeminiService already
  * passes for every call. Everything is 1 token by default - so 5 tokens is
- * literally 5 AI generations for $3. Bump an entry here (and only here) if a
+ * literally 5 AI generations for $0.75. Bump an entry here (and only here) if a
  * particular feature turns out to be expensive enough to be worth more than
  * one token; unlisted labels fall back to DEFAULT_FEATURE_TOKEN_COST.
  */

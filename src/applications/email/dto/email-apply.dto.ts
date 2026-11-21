@@ -1,4 +1,7 @@
-import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+
+/** Most addresses one application can be emailed to (keeps the feature from being used to spam). */
+export const MAX_RECIPIENTS = 5;
 
 /**
  * Step 1 of "apply by email": the user types the job (title, description, requirements) and, if they
@@ -26,11 +29,26 @@ export class CreateEmailApplicationDto {
   @MaxLength(200)
   company?: string;
 
+  // Where the job is (city / country / "Remote"). Used when tailoring the documents and the email.
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  location?: string;
+
   // Where the application goes. Can be added later, before sending.
   @IsOptional()
   @IsEmail({}, { message: 'recipientEmail must be a valid email address.' })
   @MaxLength(254)
   recipientEmail?: string;
+
+  // Several addresses (up to 5) - the same email, with both documents attached, goes to all of them.
+  // Takes precedence over `recipientEmail` when both are given.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_RECIPIENTS, { message: `You can email an application to at most ${MAX_RECIPIENTS} addresses.` })
+  @IsEmail({}, { each: true, message: 'Every recipient must be a valid email address.' })
+  @MaxLength(254, { each: true })
+  recipientEmails?: string[];
 
   // Hiring manager / recruiter name for the greeting, e.g. "Ms Okafor". Optional.
   @IsOptional()
@@ -50,6 +68,14 @@ export class UpdateEmailApplicationDto {
   @IsEmail({}, { message: 'recipientEmail must be a valid email address.' })
   @MaxLength(254)
   recipientEmail?: string;
+
+  // Replaces the whole recipient list (send [] to clear it). Takes precedence over `recipientEmail`.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_RECIPIENTS, { message: `You can email an application to at most ${MAX_RECIPIENTS} addresses.` })
+  @IsEmail({}, { each: true, message: 'Every recipient must be a valid email address.' })
+  @MaxLength(254, { each: true })
+  recipientEmails?: string[];
 
   @IsOptional()
   @IsString()

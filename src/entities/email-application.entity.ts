@@ -29,6 +29,8 @@ export class EmailApplication extends SerializableEntity {
 
   // Where the application goes. Optional while drafting; required to send.
   @Column({ type: 'text', nullable: true, default: null }) recipientEmail?: string | null;
+  // Every address the application goes to (recipientEmail above is always the first one, kept for older clients).
+  @Column({ type: 'text', array: true, nullable: true, default: null }) recipientEmails?: string[] | null;
   // Optional hiring-manager name, used for the greeting when the draft is (re)written.
   @Column({ type: 'text', nullable: true }) recipientName?: string | null;
 

@@ -26,6 +26,7 @@ import { TokensService } from '../../tokens/tokens.service';
 import { ApplicationsService } from '../applications.service';
 import {
   CreateEmailApplicationDto,
+  MAX_RECIPIENTS,
   RegenerateEmailDto,
   SendEmailApplicationDto,
   UpdateEmailApplicationDto,
@@ -76,6 +77,8 @@ export class EmailApplyService {
     await this.assertCanAffordDraft(userId);
 
     const company = dto.company?.trim() || undefined;
+    const location = dto.location?.trim() || undefined;
+    const recipients = this.normalizeRecipients(dto) ?? [];
     const description = dto.requirements?.trim()
       ? `${dto.jobDescription.trim()}\n\nRequirements:\n${dto.requirements.trim()}`
       : dto.jobDescription.trim();
@@ -87,6 +90,7 @@ export class EmailApplyService {
         applyUrl: `manual://${randomUUID()}`,
         title: dto.jobTitle.trim(),
         company,
+        location,
         jobType: 'CUSTOM',
         description,
       }),
@@ -104,7 +108,7 @@ export class EmailApplyService {
     const draft = await this.draftEmail(
       userId,
       profile,
-      { title: job.title, company: job.company || 'the company', description },
+      { title: job.title, company: job.company || 'the company', description: location ? `${description}\n\nJob location: ${location}` : description },
       { recipientName: dto.recipientName },
       warnings,
     );
@@ -113,7 +117,8 @@ export class EmailApplyService {
       this.emails.create({
         userId,
         applicationId: application.id,
-        recipientEmail: dto.recipientEmail?.trim().toLowerCase() || null,
+        recipientEmail: recipients[0] ?? null,
+        recipientEmails: recipients,
         recipientName: dto.recipientName?.trim() || null,
         subject: draft.subject,
         body: draft.body,
@@ -170,8 +175,11 @@ export class EmailApplyService {
     await this.applicationsService.generateDocuments(userId, applicationId);
     const old = before.filter((d) => !!d.id);
     if (old.length) {
+      // Never delete a file that a freshly generated document points at.
+      const current = await this.documents.find({ where: { applicationId } });
+      const keep = new Set(current.filter((d) => !old.some((o) => o.id === d.id)).map((d) => resolve(d.filePath)));
       await this.documents.delete(old.map((d) => d.id));
-      await Promise.all(old.map((d) => this.deleteGeneratedFile(d.filePath)));
+      await Promise.all(old.filter((d) => !keep.has(resolve(d.filePath))).map((d) => this.deleteGeneratedFile(d.filePath)));
     }
     return this.view(userId, applicationId);
   }
@@ -192,10 +200,10 @@ export class EmailApplyService {
 
     // Apply any edits that came with the request, then validate the final message.
     const patch = this.editPatch(dto);
-    const recipient = String(patch.recipientEmail ?? existing.recipientEmail ?? '').trim().toLowerCase();
+    const recipients = this.normalizeRecipients(patch as any) ?? this.recipientsOf(existing);
     const subject = String(patch.subject ?? existing.subject ?? '').replace(/\s+/g, ' ').trim();
     const body = String(patch.body ?? existing.body ?? '').trim();
-    if (!recipient || !EMAIL_RE.test(recipient)) throw new BadRequestException('Add the email address to send the application to.');
+    if (!recipients.length) throw new BadRequestException('Add the email address to send the application to.');
     if (!subject) throw new BadRequestException('The email needs a subject.');
     if (body.length < 20) throw new BadRequestException('The email body is too short to send.');
 
@@ -213,7 +221,7 @@ export class EmailApplyService {
     const claim = await this.emails
       .createQueryBuilder()
       .update(EmailApplication)
-      .set({ ...patch, recipientEmail: recipient, subject, body, status: 'SENDING', sendError: null })
+      .set({ ...patch, recipientEmail: recipients[0], recipientEmails: recipients, subject, body, status: 'SENDING', sendError: null })
       .where('id = :id AND "userId" = :userId', { id: existing.id, userId })
       .andWhere(`(status IN (:...allowed) OR (status = 'SENDING' AND "updatedAt" < :stale))`, {
         allowed,
@@ -225,16 +233,16 @@ export class EmailApplyService {
     const replyTo = profile.email && EMAIL_RE.test(profile.email) ? profile.email.toLowerCase() : user.email;
     try {
       await this.mail.sendApplicationEmail({
-        to: recipient,
+        to: recipients,
         subject,
         text: body,
         applicantName,
         replyTo,
-        bcc: dto.sendCopyToMe === false ? undefined : user.email,
+        bcc: dto.sendCopyToMe === false || recipients.includes(user.email.toLowerCase()) ? undefined : user.email,
         attachments,
       });
     } catch (err) {
-      this.logger.error(`Application email ${applicationId} to ${recipient} failed: ${(err as Error).message}`);
+      this.logger.error(`Application email ${applicationId} to ${recipients.join(', ')} failed: ${(err as Error).message}`);
       await this.emails.update(
         { id: existing.id },
         { status: 'FAILED', sendError: "The email provider couldn't deliver it. Check the address and try again in a moment." },
@@ -251,7 +259,7 @@ export class EmailApplyService {
       {
         status: 'SUBMITTED',
         submittedAt: sentAt,
-        feedback: `Applied by email to ${recipient} with your tailored resume and cover letter attached.\nReplies go to ${replyTo}.`,
+        feedback: `Applied by email to ${recipients.join(', ')} with your tailored resume and cover letter attached.\nReplies go to ${replyTo}.`,
       },
     );
     return this.view(userId, applicationId);
@@ -288,10 +296,47 @@ export class EmailApplyService {
     return email;
   }
 
+  /**
+   * The recipient list from `recipientEmails` (preferred) or the single `recipientEmail`: trimmed, lower-cased,
+   * de-duplicated and validated. Returns undefined when the request says nothing about recipients, and an empty
+   * list when it clears them. Also tolerates several addresses typed into one string ("a@x.com, b@y.com").
+   */
+  private normalizeRecipients(src: { recipientEmail?: string | null; recipientEmails?: string[] | null }): string[] | undefined {
+    const raw =
+      src.recipientEmails !== undefined && src.recipientEmails !== null
+        ? src.recipientEmails
+        : src.recipientEmail !== undefined && src.recipientEmail !== null
+          ? [src.recipientEmail]
+          : undefined;
+    if (!raw) return undefined;
+    const list = [
+      ...new Set(
+        raw
+          .flatMap((v) => String(v).split(/[,;\s]+/))
+          .map((v) => v.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
+    const bad = list.find((v) => !EMAIL_RE.test(v) || v.length > 254);
+    if (bad) throw new BadRequestException(`"${bad}" is not a valid email address.`);
+    if (list.length > MAX_RECIPIENTS) throw new BadRequestException(`You can email an application to at most ${MAX_RECIPIENTS} addresses.`);
+    return list;
+  }
+
+  /** The saved recipients of an email application (older rows only have the single recipientEmail). */
+  private recipientsOf(email: EmailApplication): string[] {
+    if (email.recipientEmails?.length) return email.recipientEmails;
+    return email.recipientEmail ? [email.recipientEmail] : [];
+  }
+
   /** Normalised column values for the edit fields that were actually provided. */
   private editPatch(dto: UpdateEmailApplicationDto): Partial<EmailApplication> {
     const patch: Partial<EmailApplication> = {};
-    if (dto.recipientEmail !== undefined) patch.recipientEmail = dto.recipientEmail.trim().toLowerCase();
+    const recipients = this.normalizeRecipients(dto);
+    if (recipients) {
+      patch.recipientEmails = recipients;
+      patch.recipientEmail = recipients[0] ?? null;
+    }
     if (dto.recipientName !== undefined) patch.recipientName = dto.recipientName.trim() || null;
     if (dto.subject !== undefined) patch.subject = dto.subject.replace(/\s+/g, ' ').trim();
     if (dto.body !== undefined) patch.body = dto.body.replace(/\r\n/g, '\n').trim();

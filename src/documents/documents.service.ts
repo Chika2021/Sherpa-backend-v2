@@ -1,4 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { randomBytes } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Document, Packer, Paragraph, HeadingLevel, TextRun } from 'docx';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -8,6 +11,8 @@ import { GeneratedDocument } from '../entities/generated-document.entity';
 
 @Injectable()
 export class DocumentsService {
+  private readonly logger = new Logger(DocumentsService.name);
+
   constructor(
     @InjectDataSource() private dataSource: DataSource,
     private storage: StorageService,
@@ -33,14 +38,17 @@ export class DocumentsService {
     );
 
     const safeSlug = `${job.company}-${job.title}`.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    // Unique per generation. The name used to be identical on every regeneration, so "regenerate" overwrote the
+    // file and then the cleanup of the old version deleted the brand-new file too (download -> 404).
+    const uniq = randomBytes(4).toString('hex');
     const resumePath = this.storage.writeGeneratedFile(
       userId,
-      `resume-${safeSlug}-${applicationId}.docx`,
+      `resume-${safeSlug}-${applicationId}-${uniq}.docx`,
       resumeBuffer,
     );
     const coverLetterPath = this.storage.writeGeneratedFile(
       userId,
-      `cover-letter-${safeSlug}-${applicationId}.docx`,
+      `cover-letter-${safeSlug}-${applicationId}-${uniq}.docx`,
       coverLetterBuffer,
     );
 
@@ -65,6 +73,36 @@ export class DocumentsService {
       resume: { ...resumeDoc.toJSON(), url: this.storage.publicUrlFor(resumePath) },
       coverLetter: { ...coverLetterDoc.toJSON(), url: this.storage.publicUrlFor(coverLetterPath) },
     };
+  }
+
+  /**
+   * Makes sure the .docx behind a /files/<userId>/<filename> URL exists on disk, rebuilding it from the text saved
+   * in the database when it is gone. Hosts with an ephemeral disk (Render, Heroku, containers) wipe the generated
+   * folder on every restart/redeploy/spin-down while the database rows survive, which is what made downloads fail.
+   * Returns true when the file is present afterwards.
+   */
+  async restoreFileIfMissing(userId: string, filename: string): Promise<boolean> {
+    if (!/^[0-9a-f-]{36}$/i.test(userId)) return false;
+    if (filename !== path.basename(filename) || !filename.toLowerCase().endsWith('.docx')) return false;
+
+    const target = path.join(this.storage.generatedDir, userId, filename);
+    if (fs.existsSync(target)) return true;
+
+    const repo = this.dataSource.getRepository(GeneratedDocument);
+    const rows = await repo.find({
+      where: { userId },
+      relations: { application: { job: true } },
+      order: { createdAt: 'DESC' },
+    });
+    const doc = rows.find((d) => path.basename(d.filePath.split('\\').join('/')) === filename);
+    if (!doc || !doc.content) return false;
+
+    const job = doc.application?.job;
+    const label = doc.type === 'COVER_LETTER' ? 'Cover Letter' : 'Resume';
+    const title = job ? `${label} - ${job.title} at ${job.company || 'the company'}` : label;
+    this.storage.writeGeneratedFile(userId, filename, await this.textToDocx(title, doc.content));
+    this.logger.warn(`Rebuilt missing generated file ${filename} from the database.`);
+    return true;
   }
 
   private async textToDocx(title: string, body: string): Promise<Buffer> {
