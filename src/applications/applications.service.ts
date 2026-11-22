@@ -268,7 +268,7 @@ export class ApplicationsService {
   }
 
   /**
-   * Records the outcome of an application that the user's own browser submitted (via the Sherpa extension).
+   * Records the outcome of an application that the user's own browser submitted (via the Sherpha extension).
    * Nothing is submitted here - this only stores the result so it shows up in Applications and the dashboard.
    * An application that is already SUBMITTED is never downgraded by a later report.
    */

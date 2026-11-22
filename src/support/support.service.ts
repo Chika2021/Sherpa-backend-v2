@@ -182,7 +182,7 @@ export class SupportService {
       .sendNotification(
         ticket.email,
         `Re: ${ticket.subject}`,
-        `Hi ${ticket.name.split(' ')[0] || 'there'},\n\n${msg.body}${where}\n\n- ${admin.name || 'Support'}, Sherpar Support`,
+        `Hi ${ticket.name.split(' ')[0] || 'there'},\n\n${msg.body}${where}\n\n- ${admin.name || 'Support'}, Sherpha Support`,
       )
       .catch(() => undefined);
     return msg;

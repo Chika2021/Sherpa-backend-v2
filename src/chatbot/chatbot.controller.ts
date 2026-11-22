@@ -15,7 +15,7 @@ export class ChatbotController {
   @Get('welcome')
   welcome() {
     return {
-      reply: "Hi! I'm the Sherpar assistant. Ask me anything about the app - I can also connect you with our support team.",
+      reply: "Hi! I'm the Sherpha assistant. Ask me anything about the app - I can also connect you with our support team.",
       suggestions: QUICK_SUGGESTIONS,
     };
   }

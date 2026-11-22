@@ -45,7 +45,7 @@ export class InternshipDocumentService {
   }
 
   private appName(): string {
-    return this.config.get<string>('APP_NAME')?.trim() || 'Sherpar';
+    return this.config.get<string>('APP_NAME')?.trim() || 'Sherpha';
   }
 
   private activityWindow(attempts: Array<{ passed: boolean; attemptedAt: Date | string }>) {

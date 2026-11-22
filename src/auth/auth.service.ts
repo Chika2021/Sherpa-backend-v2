@@ -130,7 +130,7 @@ export class AuthService {
 
     void this.notifications.notify(user.id, {
       type: 'ACCOUNT',
-      title: 'Welcome to Sherpar',
+      title: 'Welcome to Sherpha',
       body:
         `You have ${tokens} free token${tokens === 1 ? '' : 's'} to try the AI tools` +
         (referral.applied && referral.bonusTokens ? `, including ${referral.bonusTokens} bonus tokens from your friend's invite` : '') +

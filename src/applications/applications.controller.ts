@@ -42,7 +42,7 @@ export class ApplicationsController {
     return this.applicationsService.generateForJobDetails(userId, dto);
   }
 
-  // The browser (Sherpa extension) fills in and submits the application itself and reports the outcome here.
+  // The browser (Sherpha extension) fills in and submits the application itself and reports the outcome here.
   @Post(':id/result')
   recordResult(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: RecordResultDto) {
     return this.applicationsService.recordClientResult(userId, id, dto);

@@ -1,7 +1,7 @@
 import { IsArray, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
 /**
- * The outcome of an application that was filled in and submitted by the Sherpa browser extension
+ * The outcome of an application that was filled in and submitted by the Sherpha browser extension
  * (the browser, not this server, does the submitting - this just records what happened).
  */
 export class RecordResultDto {

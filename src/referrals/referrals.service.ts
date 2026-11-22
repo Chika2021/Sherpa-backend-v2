@@ -327,7 +327,7 @@ export class ReferralsService {
     return {
       code,
       link,
-      shareText: `I use Sherpar to land jobs faster. Join with my link and get ${REFERRAL_SIGNUP_BONUS_TOKENS} extra free tokens: ${link}`,
+      shareText: `I use Sherpha to land jobs faster. Join with my link and get ${REFERRAL_SIGNUP_BONUS_TOKENS} extra free tokens: ${link}`,
       rewards: {
         friendBonusTokens: REFERRAL_SIGNUP_BONUS_TOKENS,
         verifiedRewardTokens: REFERRAL_VERIFIED_REWARD_TOKENS,

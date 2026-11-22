@@ -25,7 +25,7 @@ for applications made this way. `DELETE /applications/:id` removes the email row
 - `location` (city / country / "Remote") is saved on the job and given to the AI when it writes the resume, cover letter and email.
 
 ## How the email is sent
-- From the app's verified sender (`MAIL_FROM_EMAIL`), shown as "<Applicant> via Sherpar", with **Reply-To set to the applicant**
+- From the app's verified sender (`MAIL_FROM_EMAIL`), shown as "<Applicant> via Sherpha", with **Reply-To set to the applicant**
   (the email on their resume, else their account email). Employers' replies reach the applicant, not the app.
 - A hidden BCC copy goes to the account email unless `sendCopyToMe: false`.
 - Needs `BREVO_API_KEY` or `RESEND_API_KEY` (or SMTP locally). With none configured, `send` returns 503 and says so; it never pretends to have sent.

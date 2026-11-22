@@ -74,7 +74,7 @@ export class MonitoringService implements OnModuleInit {
     @InjectRepository(PaymentTransaction) private payments: Repository<PaymentTransaction>,
     @InjectRepository(TokenBillingLedger) private ledger: Repository<TokenBillingLedger>,
   ) {
-    this.secret = this.config.get<string>('JWT_SECRET') || 'sherpar-monitoring';
+    this.secret = this.config.get<string>('JWT_SECRET') || 'sherpha-monitoring';
   }
 
   onModuleInit() {
@@ -750,8 +750,8 @@ export class MonitoringService implements OnModuleInit {
     });
     void this.mail.sendNotification(
       user.email,
-      'A warning about your Sherpar account',
-      `Hi ${user.firstName || 'there'},\n\n${text}\n\nPlease follow our rules for using the app. Repeated violations can lead to your account being suspended.\n\nIf you think this is a mistake, reply from the Helpdesk in the app.\n\n- The Sherpar team`,
+      'A warning about your Sherpha account',
+      `Hi ${user.firstName || 'there'},\n\n${text}\n\nPlease follow our rules for using the app. Repeated violations can lead to your account being suspended.\n\nIf you think this is a mistake, reply from the Helpdesk in the app.\n\n- The Sherpha team`,
     );
 
     return this.close(flag, actor, 'WARNED', `Warned: ${text}`.slice(0, 500));
@@ -766,8 +766,8 @@ export class MonitoringService implements OnModuleInit {
     await this.users.update({ id: user.id }, { suspended: true, suspendedReason: why });
     void this.mail.sendNotification(
       user.email,
-      'Your Sherpar account has been suspended',
-      `Hi ${user.firstName || 'there'},\n\nYour account has been suspended.\n\nReason: ${why}\n\nIf you believe this is a mistake, contact support and we will review it.\n\n- The Sherpar team`,
+      'Your Sherpha account has been suspended',
+      `Hi ${user.firstName || 'there'},\n\nYour account has been suspended.\n\nReason: ${why}\n\nIf you believe this is a mistake, contact support and we will review it.\n\n- The Sherpha team`,
     );
 
     // Every other open flag on this account is now moot.
@@ -799,8 +799,8 @@ export class MonitoringService implements OnModuleInit {
     });
     void this.mail.sendNotification(
       user.email,
-      'Your Sherpar account is active again',
-      `Hi ${user.firstName || 'there'},\n\nYour suspension has been lifted and you can sign in again.\n\n- The Sherpar team`,
+      'Your Sherpha account is active again',
+      `Hi ${user.firstName || 'there'},\n\nYour suspension has been lifted and you can sign in again.\n\n- The Sherpha team`,
     );
     return this.close(flag, actor, 'RESOLVED', note?.trim() || 'Suspension lifted');
   }

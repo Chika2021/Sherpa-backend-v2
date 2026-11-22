@@ -218,7 +218,7 @@ export class AdminService {
       ai = null;
     }
     return {
-      app: { name: 'Sherpar API', nodeEnv: process.env.NODE_ENV ?? 'development', port: process.env.PORT ?? 3000 },
+      app: { name: 'Sherpha API', nodeEnv: process.env.NODE_ENV ?? 'development', port: process.env.PORT ?? 3000 },
       runtime: {
         node: process.version,
         platform: process.platform,

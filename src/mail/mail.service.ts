@@ -15,7 +15,7 @@ import * as nodemailer from 'nodemailer';
  *
  * Env vars:
  *   MAIL_FROM_EMAIL / SMTP_FROM   sender address (must be verified with the provider)
- *   MAIL_FROM_NAME                optional display name (default "Sherpar")
+ *   MAIL_FROM_NAME                optional display name (default "Sherpha")
  *   BREVO_API_KEY | RESEND_API_KEY
  */
 /** An application email: plain-text body, the applicant as Reply-To, resume / cover letter attached. */
@@ -48,7 +48,7 @@ export class MailService {
       this.config.get<string>('MAIL_FROM_EMAIL') ||
       this.config.get<string>('SMTP_FROM') ||
       'no-reply@job-apply.local';
-    this.fromName = this.config.get<string>('MAIL_FROM_NAME') || 'Sherpar';
+    this.fromName = this.config.get<string>('MAIL_FROM_NAME') || 'Sherpha';
 
     if (this.brevoKey) {
       this.logger.log('Mail provider: Brevo (HTTPS API)');
@@ -109,12 +109,12 @@ If you didn't request this, you can safely ignore this email.`;
     const hi = firstName ? `Hi ${firstName},` : 'Hi,';
     const text = `${hi}
 
-Welcome to Sherpar! Please confirm your email address so we know it's really you:
+Welcome to Sherpha! Please confirm your email address so we know it's really you:
 ${verifyUrl}
 
 This link expires in 24 hours. If you didn't create an account, you can ignore this email.`;
     const html = `<p>${hi}</p>
-<p>Welcome to Sherpar! Please confirm your email address so we know it's really you.</p>
+<p>Welcome to Sherpha! Please confirm your email address so we know it's really you.</p>
 <p><a href="${verifyUrl}">Confirm my email</a> (this link expires in 24 hours).</p>
 <p>If you didn't create an account, you can ignore this email.</p>`;
 

@@ -42,7 +42,7 @@ export class ChatbotService {
     }
     if (GREETING_RE.test(text) && text.split(/\s+/).length <= 4) {
       return {
-        reply: "Hi! I'm the Sherpar assistant. I can show you around the app, explain tokens and pricing, or help with a problem. What do you need?",
+        reply: "Hi! I'm the Sherpha assistant. I can show you around the app, explain tokens and pricing, or help with a problem. What do you need?",
         links: [],
         suggestions: QUICK_SUGGESTIONS,
         handoff: false,
@@ -131,7 +131,7 @@ export class ChatbotService {
       .join('\n');
 
     const prompt = [
-      'You are the friendly in-app assistant for "Sherpar", a job-application and career app.',
+      'You are the friendly in-app assistant for "Sherpha", a job-application and career app.',
       'Answer ONLY using the knowledge below. Be concise (max 3 short sentences), plain text, no markdown.',
       'If the answer is not in the knowledge, say you are not sure and suggest opening a support ticket so the team can help.',
       'Never invent features, prices, links or policies. Never ask for passwords or payment details.',
