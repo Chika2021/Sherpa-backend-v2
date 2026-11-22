@@ -92,7 +92,7 @@ export const KNOWLEDGE: KnowledgeTopic[] = [
     title: 'Tokens & pricing',
     keywords: ['token', 'tokens', 'price', 'pricing', 'cost', 'how much', 'free', 'credit', 'credits', 'balance', 'buy', 'purchase', 'wallet', 'plan'],
     answer:
-      'AI features run on tokens: {pricing} Every new account gets free signup tokens. Your balance and full history are on the Tokens/Wallet page.',
+      'AI features run on tokens: {pricing} Every new account gets free signup tokens. You can also invite friends from the Billing page: friends who join with your link get bonus tokens, and you earn tokens when they confirm their email and when they make their first purchase. Your balance and full history are on the Tokens/Wallet page.',
     path: '/tokens',
     linkLabel: 'Open my wallet',
   },

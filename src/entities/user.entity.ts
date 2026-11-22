@@ -32,6 +32,41 @@ export class User extends SerializableEntity {
   @Column({ type: 'double precision', default: 0 })
   tokens: number;
 
+  // ---- referrals ----
+  // The code in this user's invite link (/register?ref=CODE). Generated at registration (and lazily for accounts
+  // that existed before referrals) - see ReferralsService.
+  @Index({ unique: true })
+  @Column({ type: 'text', nullable: true, default: null })
+  referralCode?: string | null;
+
+  // Who invited this user. Set once, at registration, and never changed: a user can only be referred once.
+  @Column({ type: 'uuid', nullable: true, default: null })
+  referredBy?: string | null;
+
+  // ---- email verification ----
+  // Set when the user clicks the link in the verification email. Null = not verified yet. The referrer's
+  // reward is paid only after this, so fake sign-ups with made-up addresses earn nothing.
+  @Column({ type: 'timestamptz', nullable: true, default: null })
+  emailVerifiedAt?: Date | null;
+
+  // Only the hash of the emailed token is stored. `select: false` keeps these out of every normal query, so they
+  // can never leak into an API response.
+  @Column({ type: 'text', nullable: true, default: null, select: false }) emailVerificationTokenHash?: string | null;
+  @Column({ type: 'timestamptz', nullable: true, default: null, select: false }) emailVerificationExpiresAt?: Date | null;
+  @Column({ type: 'timestamptz', nullable: true, default: null, select: false }) emailVerificationSentAt?: Date | null;
+
+  // ---- abuse monitoring (never returned to clients: select: false) ----
+  // The mailbox the address really delivers to (gmail dots / +tags removed) - catches alias farming and self-referral.
+  @Index()
+  @Column({ type: 'text', nullable: true, default: null, select: false }) emailCanonical?: string | null;
+  // Keyed hashes of the IP address and the browser's device id at signup and at the latest login. Compared, never shown.
+  @Index()
+  @Column({ type: 'text', nullable: true, default: null, select: false }) signupIpHash?: string | null;
+  @Index()
+  @Column({ type: 'text', nullable: true, default: null, select: false }) signupDeviceHash?: string | null;
+  @Column({ type: 'text', nullable: true, default: null, select: false }) lastIpHash?: string | null;
+  @Column({ type: 'text', nullable: true, default: null, select: false }) lastDeviceHash?: string | null;
+
   // Set by AuthService.forgotPassword, cleared on successful reset (or left
   // to expire). The raw token is emailed to the user - only its hash is ever
   // stored. Never returned to clients.
@@ -48,6 +83,10 @@ export class User extends SerializableEntity {
   // Suspended accounts can't log in or use any authenticated endpoint.
   @Column({ type: 'boolean', default: false })
   suspended: boolean;
+
+  // Why the account was suspended (shown to the user when they try to sign in). Cleared when it is lifted.
+  @Column({ type: 'text', nullable: true, default: null })
+  suspendedReason?: string | null;
 
   @Column({ type: 'timestamptz', nullable: true }) lastLoginAt?: Date | null;
 

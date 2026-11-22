@@ -12,6 +12,7 @@ import { v4 as uuid } from 'uuid';
 import { User } from '../entities/user.entity';
 import { TokenBillingLedger, TokenLedgerEntryType } from '../entities/token-billing-ledger.entity';
 import { assertValidId } from '../database/db-utils';
+import { MonitoringService } from '../monitoring/monitoring.service';
 import { isTransientConnectionError } from '../database/transient-errors';
 import {
   ResolvedTokenPackage,
@@ -80,6 +81,7 @@ export class TokensService {
     @InjectRepository(TokenBillingLedger) private ledger: Repository<TokenBillingLedger>,
     @InjectDataSource() private dataSource: DataSource,
     private config: ConfigService,
+    private monitoring: MonitoringService,
   ) {}
 
   /** Current pricing, resolved from env each call so a rate change needs no restart. */
@@ -259,6 +261,7 @@ export class TokensService {
       label: billing.label,
       model: billing.model ?? null,
     });
+    this.monitoring.noteUsage(userId);
     return {
       label: billing.label,
       model: billing.model ?? null,
@@ -276,7 +279,9 @@ export class TokensService {
     if (!Number.isFinite(tokens) || tokens <= 0) {
       throw new BadRequestException('Token amount must be a positive number');
     }
-    return this.applyDelta(userId, -tokens, { entryType: 'USAGE', label });
+    const balanceAfter = await this.applyDelta(userId, -tokens, { entryType: 'USAGE', label });
+    this.monitoring.noteUsage(userId);
+    return balanceAfter;
   }
 
   /** Full ledger (purchases and usage), newest first. */

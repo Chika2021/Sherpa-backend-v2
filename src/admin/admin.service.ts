@@ -22,6 +22,8 @@ import { TokensService } from '../tokens/tokens.service';
 import { GeminiService } from '../ai/gemini.service';
 import { MailService } from '../mail/mail.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { MonitoringService } from '../monitoring/monitoring.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { manageableRoles } from '../common/roles';
 import { CreateUserDto, ListPaymentsQueryDto, ListUsersQueryDto, UpdateUserDto } from './admin.dto';
 
@@ -45,6 +47,8 @@ export class AdminService {
     private gemini: GeminiService,
     private mail: MailService,
     private realtime: RealtimeService,
+    private monitoring: MonitoringService,
+    private notifications: NotificationsService,
     @InjectRepository(User) private users: Repository<User>,
     @InjectRepository(Resume) private resumes: Repository<Resume>,
     @InjectRepository(Job) private jobs: Repository<Job>,
@@ -263,8 +267,10 @@ export class AdminService {
       .take(limit);
 
     const [rows, total] = await qb.getManyAndCount();
+    // A "flagged" marker for accounts with an open monitoring flag (see the Flagged accounts tab).
+    const flagCounts = await this.monitoring.openFlagCounts(rows.map((u) => u.id));
     return {
-      items: rows.map((u) => this.publicUser(u)),
+      items: rows.map((u) => ({ ...this.publicUser(u), openFlags: flagCounts.get(u.id) ?? 0 })),
       total,
       page,
       limit,
@@ -338,7 +344,10 @@ export class AdminService {
     if (dto.role) this.assertCanAssign(actor, dto.role);
 
     const patch: Record<string, unknown> = {};
-    if (typeof dto.suspended === 'boolean') patch.suspended = dto.suspended;
+    if (typeof dto.suspended === 'boolean') {
+      patch.suspended = dto.suspended;
+      if (!dto.suspended) patch.suspendedReason = null; // lifting a suspension clears the reason shown at sign-in
+    }
     if (dto.role) patch.role = dto.role;
     if (dto.email !== undefined) {
       const email = normalizeEmail(dto.email);
@@ -402,6 +411,12 @@ export class AdminService {
       label: (note?.trim() || 'admin-grant').slice(0, 120),
     });
     this.logger.log(`${actor.role} ${actor.id} added ${amount} token(s) to ${id}; balance now ${result.balanceAfter}.`);
+    void this.notifications.notify(id, {
+      type: 'TOKENS',
+      title: `${amount} token${amount === 1 ? '' : 's'} added`,
+      body: `Support added ${amount} token${amount === 1 ? '' : 's'} to your wallet. New balance: ${result.balanceAfter}.`,
+      link: '/billing',
+    });
     return result;
   }
 

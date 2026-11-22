@@ -7,14 +7,28 @@ import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  register(@Body() dto: RegisterDto, @Req() req: any) {
+    return this.authService.register(dto, req);
+  }
+
+  // Confirms the email address from the link in the verification email. Public: the link works without being signed in.
+  @Post('verify-email')
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto);
+  }
+
+  // Sends a fresh verification email to the signed-in user (once a minute at most).
+  @UseGuards(JwtAuthGuard)
+  @Post('resend-verification')
+  resendVerification(@CurrentUser('id') userId: string) {
+    return this.authService.resendVerification(userId);
   }
 
   @Post('login')

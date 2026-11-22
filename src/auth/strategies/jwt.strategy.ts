@@ -37,6 +37,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Count this request as activity (fire-and-forget: tracking never blocks or fails a request).
     void this.tracker.touch({ id: user.id, role: user.role });
     const { passwordHash, passwordResetTokenHash, passwordResetExpiresAt, ...safeUser } = user.toJSON() as any;
-    return safeUser;
+    return { ...safeUser, emailVerified: !!user.emailVerifiedAt };
   }
 }

@@ -30,6 +30,9 @@ import { SupportModule } from './support/support.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
 import { TesterModule } from './tester/tester.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { MonitoringModule } from './monitoring/monitoring.module';
+import { ReferralsModule } from './referrals/referrals.module';
 
 @Module({
   imports: [
@@ -62,7 +65,10 @@ import { DashboardModule } from './dashboard/dashboard.module';
     ApplicationsModule,
     DocumentsModule,
     ResumeBuilderModule,
+    NotificationsModule,
+    MonitoringModule,
     TokensModule,
+    ReferralsModule,
     PaymentsModule,
     CredentialsModule,
     InterviewPrepModule,

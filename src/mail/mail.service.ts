@@ -104,6 +104,23 @@ If you didn't request this, you can safely ignore this email.`;
     await this.send({ to, subject, text, html });
   }
 
+  async sendVerificationEmail(to: string, verifyUrl: string, firstName?: string | null) {
+    const subject = 'Confirm your email address';
+    const hi = firstName ? `Hi ${firstName},` : 'Hi,';
+    const text = `${hi}
+
+Welcome to Sherpar! Please confirm your email address so we know it's really you:
+${verifyUrl}
+
+This link expires in 24 hours. If you didn't create an account, you can ignore this email.`;
+    const html = `<p>${hi}</p>
+<p>Welcome to Sherpar! Please confirm your email address so we know it's really you.</p>
+<p><a href="${verifyUrl}">Confirm my email</a> (this link expires in 24 hours).</p>
+<p>If you didn't create an account, you can ignore this email.</p>`;
+
+    await this.send({ to, subject, text, html });
+  }
+
   /** Generic notification email (helpdesk replies, new-ticket alerts to the admins). Never throws. */
   async sendNotification(to: string, subject: string, text: string): Promise<void> {
     const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

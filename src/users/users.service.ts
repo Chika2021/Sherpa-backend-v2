@@ -12,7 +12,7 @@ export class UsersService {
 
   private sanitize(user: User) {
     const { passwordHash, passwordResetTokenHash, passwordResetExpiresAt, ...safe } = user.toJSON() as any;
-    return safe;
+    return { ...safe, emailVerified: !!user.emailVerifiedAt };
   }
 
   async getProfile(userId: string) {

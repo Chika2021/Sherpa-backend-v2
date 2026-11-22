@@ -57,13 +57,13 @@ export const DASHBOARDS: Record<DashboardRole, DashboardInfo> = {
     // see common/super-admin-access.ts.
     path: '/admin',
     label: 'Super Admin',
-    permissions: ['overview', 'signups', 'live-stream', 'users.read', 'users.write', 'tokens.grant', 'tokens.deduct', 'activity.view', 'payments', 'helpdesk.read', 'helpdesk.reply', 'system', 'local-job-boards', 'countdown', 'tester'],
+    permissions: ['overview', 'signups', 'live-stream', 'users.read', 'users.write', 'tokens.grant', 'tokens.deduct', 'activity.view', 'payments', 'helpdesk.read', 'helpdesk.reply', 'flags.read', 'flags.review', 'system', 'local-job-boards', 'countdown', 'tester'],
   },
   ADMIN: {
     key: 'admin',
     path: '/dashboard/admin',
     label: 'Admin',
-    permissions: ['overview', 'signups', 'live-stream', 'users.read', 'helpdesk.read', 'local-job-boards', 'countdown'],
+    permissions: ['overview', 'signups', 'live-stream', 'users.read', 'helpdesk.read', 'flags.read', 'flags.review', 'local-job-boards', 'countdown'],
   },
   MANAGEMENT: {
     key: 'management',

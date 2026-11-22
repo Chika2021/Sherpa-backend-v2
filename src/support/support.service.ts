@@ -7,6 +7,7 @@ import { assertValidId, escapeLike } from '../database/db-utils';
 import { normalizeEmail } from '../entities/user.entity';
 import { MailService } from '../mail/mail.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ListTicketsQueryDto } from './support.dto';
 
 export interface Actor {
@@ -22,6 +23,7 @@ export class SupportService {
     private config: ConfigService,
     private mail: MailService,
     private realtime: RealtimeService,
+    private notifications: NotificationsService,
     @InjectRepository(SupportTicket) private tickets: Repository<SupportTicket>,
     @InjectRepository(SupportMessage) private messages: Repository<SupportMessage>,
     @InjectRepository(User) private users: Repository<User>,
@@ -94,6 +96,7 @@ export class SupportService {
   async getMine(ticketId: string, userId: string) {
     const ticket = await this.requireOwnTicket(ticketId, userId);
     const messages = await this.messages.find({ where: { ticketId }, order: { createdAt: 'ASC' } });
+    void this.notifications.markReadByMeta(userId, { ticketId });
     if (ticket.unreadByUser) {
       await this.tickets.update({ id: ticketId }, { unreadByUser: false });
       ticket.unreadByUser = false;
@@ -160,6 +163,17 @@ export class SupportService {
       { status: 'ANSWERED', awaitingAdmin: false, unreadByUser: Boolean(ticket.userId) },
     );
     this.realtime.publish({ type: 'ticket.updated', ticket: { id: ticketId, status: 'ANSWERED', awaitingAdmin: false } });
+
+    // A registered user is told in the app (the bell) as well as by email.
+    if (ticket.userId) {
+      void this.notifications.notify(ticket.userId, {
+        type: 'MESSAGE',
+        title: `New reply: ${ticket.subject}`.slice(0, 120),
+        body: msg.body.length > 160 ? `${msg.body.slice(0, 157)}...` : msg.body,
+        link: `/helpdesk?ticket=${ticket.id}`,
+        meta: { ticketId: ticket.id },
+      });
+    }
 
     // Visitors from the homepage form have no account, so the email IS their reply channel.
     const appUrl = (this.config.get<string>('FRONTEND_URL') || this.config.get<string>('APP_URL') || '').replace(/\/$/, '');

@@ -5,7 +5,9 @@ export type RealtimeEvent =
   | { type: 'user.registered'; user: { id: string; email: string; name: string; createdAt: Date } }
   | { type: 'user.deleted'; userId: string }
   | { type: 'ticket.new'; ticket: { id: string; subject: string; name: string; email: string; source: string } }
-  | { type: 'ticket.updated'; ticket: { id: string; status: string; awaitingAdmin: boolean } };
+  | { type: 'ticket.updated'; ticket: { id: string; status: string; awaitingAdmin: boolean } }
+  | { type: 'flag.new'; flag: { id: string; userEmail: string; severity: string; title: string; rule: string } }
+  | { type: 'flag.updated'; flag: { id: string; status: string } };
 
 /**
  * In-process event bus. Services publish (AuthService on sign-up, SupportService on ticket activity)

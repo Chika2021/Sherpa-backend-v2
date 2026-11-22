@@ -22,6 +22,10 @@ export * from './local-job-board.entity';
 export * from './support-ticket.entity';
 export * from './support-message.entity';
 export * from './user-session.entity';
+export * from './referral.entity';
+export * from './notification.entity';
+export * from './account-flag.entity';
+export * from './user-warning.entity';
 
 import { User } from './user.entity';
 import { Resume } from './resume.entity';
@@ -45,6 +49,10 @@ import { LocalJobBoard } from './local-job-board.entity';
 import { SupportTicket } from './support-ticket.entity';
 import { SupportMessage } from './support-message.entity';
 import { UserSession } from './user-session.entity';
+import { Referral } from './referral.entity';
+import { Notification } from './notification.entity';
+import { AccountFlag } from './account-flag.entity';
+import { UserWarning } from './user-warning.entity';
 
 /** Every entity, in one place - used by both the Nest connection and the TypeORM CLI data source. */
 export const ALL_ENTITIES = [
@@ -70,4 +78,8 @@ export const ALL_ENTITIES = [
   SupportTicket,
   SupportMessage,
   UserSession,
+  Referral,
+  Notification,
+  AccountFlag,
+  UserWarning,
 ];

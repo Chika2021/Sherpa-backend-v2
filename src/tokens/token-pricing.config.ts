@@ -35,6 +35,27 @@ export const DEFAULT_MAX_PURCHASE_TOKENS = 10_000;
 /** Free trial tokens granted to every brand-new account so it can try the app before paying. */
 export const FREE_SIGNUP_TOKENS = 10;
 
+/**
+ * Referral programme (see src/referrals). Everything is paid through TokensService.credit and recorded in the
+ * token ledger with a label starting "referral:", so each reward can be audited and reversed.
+ */
+/** Extra tokens a NEW user gets when they sign up through a friend's referral link (on top of FREE_SIGNUP_TOKENS). */
+export const REFERRAL_SIGNUP_BONUS_TOKENS = 3;
+/** Paid to the REFERRER once the friend has verified their email address (never at signup). */
+export const REFERRAL_VERIFIED_REWARD_TOKENS = 3;
+/** Paid to the REFERRER when the friend makes their first successful token purchase. Uncapped: it is backed by revenue. */
+export const REFERRAL_FIRST_PURCHASE_REWARD_TOKENS = 5;
+/** Most tokens ONE referrer can earn from email-verification rewards in total. Purchase rewards are not counted. */
+export const REFERRAL_SIGNUP_REWARD_CAP_TOKENS = 30;
+/** A referral from the same browser/device as the referrer is rejected (it is a self-referral). */
+export const REFERRAL_BLOCK_SAME_DEVICE = true;
+/**
+ * Also reject when both accounts signed up from the same IP address. Off by default: phones on one mobile
+ * network (and families on one wifi) share IPs, so blocking would turn away real friends. A same-IP referral is
+ * still accepted but flagged to the admins for review.
+ */
+export const REFERRAL_BLOCK_SAME_IP = false;
+
 /** Rounds a money amount to whole cents without floating-point noise. */
 export function roundUsd(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;

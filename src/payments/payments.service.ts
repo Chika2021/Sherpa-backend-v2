@@ -11,6 +11,9 @@ import { findTokenPackage, priceForTokens, tokensForUsd } from '../tokens/token-
 import { PaymentTransaction } from '../entities/payment-transaction.entity';
 import { User } from '../entities/user.entity';
 import { assertValidId } from '../database/db-utils';
+import { NotificationsService } from '../notifications/notifications.service';
+import { ReferralsService } from '../referrals/referrals.service';
+import { MonitoringService } from '../monitoring/monitoring.service';
 
 /**
  * Buying tokens. The pricing rule is deliberately trivial and lives in one
@@ -31,6 +34,9 @@ export class PaymentsService {
     private paystack: PaystackService,
     private exchangeRates: ExchangeRateService,
     private tokens: TokensService,
+    private notifications: NotificationsService,
+    private referrals: ReferralsService,
+    private monitoring: MonitoringService,
   ) {}
 
   private defaultCurrency(): string {
@@ -246,6 +252,8 @@ export class PaymentsService {
       return transaction; // already processed
     }
 
+    // Notifications and abuse checks fire only on the FIRST change out of PENDING, so polling the verify endpoint never repeats them.
+    const wasPending = transaction.status === 'PENDING';
     const verifyRes = await this.paystack.verifyTransaction(reference);
     const paystackStatus = verifyRes.data.status;
     transaction.paystackData = verifyRes.data;
@@ -264,6 +272,21 @@ export class PaymentsService {
         this.logger.warn(
           `Transaction ${reference} verification mismatch: expected ${transaction.amount} ${transaction.currency}, got ${paidAmountMajor} ${paidCurrency}`,
         );
+        if (wasPending) {
+          void this.notifications.notify(transaction.userId, {
+            type: 'PAYMENT',
+            title: "Payment couldn't be verified",
+            body: "We couldn't confirm your payment, so no tokens were added. If you were charged, please contact support with your payment reference.",
+            link: '/billing',
+            meta: { reference },
+          });
+        }
+        void this.monitoring.onPaymentMismatch(
+          transaction.userId,
+          reference,
+          `${transaction.currency} ${Number(transaction.amount).toFixed(2)}`,
+          `${paidCurrency} ${paidAmountMajor.toFixed(2)}`,
+        );
         throw new BadRequestException('Payment verification mismatch');
       }
 
@@ -272,6 +295,13 @@ export class PaymentsService {
         transaction.status = 'SUCCESS';
         await this.transactions.save(transaction);
         this.logger.log(`Internship document paid by user ${transaction.userId} for ${transaction.purposeRef} (${reference})`);
+        void this.notifications.notify(transaction.userId, {
+          type: 'PAYMENT',
+          title: 'Payment received',
+          body: 'Your payment was successful. Your internship document is ready to download.',
+          link: '/billing',
+          meta: { reference },
+        });
         return transaction;
       }
 
@@ -291,9 +321,30 @@ export class PaymentsService {
       this.logger.log(
         `Credited ${transaction.tokensRequested} tokens to user ${transaction.userId} (${reference}); new balance ${balanceAfter}`,
       );
+
+      void this.notifications.notify(transaction.userId, {
+        type: 'PAYMENT',
+        title: 'Payment received',
+        body: `${transaction.tokensRequested} token${transaction.tokensRequested === 1 ? '' : 's'} added to your wallet. New balance: ${balanceAfter}.`,
+        link: '/billing',
+        meta: { reference, tokens: transaction.tokensRequested },
+      });
+
+      // If a friend's invite brought this user in, their referrer earns the first-purchase reward (paid once only).
+      await this.referrals.onFirstPurchase(String(transaction.userId), reference);
     } else {
       transaction.status = paystackStatus === 'abandoned' ? 'ABANDONED' : 'FAILED';
       await this.transactions.save(transaction);
+      if (wasPending && transaction.status === 'FAILED') {
+        void this.notifications.notify(transaction.userId, {
+          type: 'PAYMENT',
+          title: 'Payment failed',
+          body: 'Your payment did not go through and you were not charged. You can try again from the Billing page.',
+          link: '/billing',
+          meta: { reference },
+        });
+        void this.monitoring.onPaymentFailed(transaction.userId, reference);
+      }
     }
 
     return transaction;
