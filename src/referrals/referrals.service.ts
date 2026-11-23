@@ -322,6 +322,40 @@ export class ReferralsService {
     const counted = rows.filter((r) => r.status !== 'REJECTED');
     const verifyEarned = counted.reduce((s, r) => s + Number(r.verifyRewardTokens), 0);
     const purchaseEarned = counted.reduce((s, r) => s + Number(r.purchaseRewardTokens), 0);
+    const tokensEarned = verifyEarned + purchaseEarned;
+
+    // What a token is worth in money, so people can see "how much they have made" and not only a token count.
+    const pricePerTokenUsd = this.tokens.pricing().pricePerTokenUsd;
+    const toUsd = (tokens: number) => Math.round(tokens * pricePerTokenUsd * 100) / 100;
+
+    // Friends still on the way: a joined friend can still confirm their email and buy; a confirmed one can still buy.
+    const awaitingVerify = counted.filter((r) => r.status === 'PENDING').length;
+    const awaitingPurchase = counted.filter((r) => r.status === 'PENDING' || r.status === 'VERIFIED').length;
+    const verifyLeft = Math.max(0, REFERRAL_SIGNUP_REWARD_CAP_TOKENS - verifyEarned);
+    const potentialVerifyTokens = Math.min(awaitingVerify * REFERRAL_VERIFIED_REWARD_TOKENS, verifyLeft);
+    const potentialPurchaseTokens = awaitingPurchase * REFERRAL_FIRST_PURCHASE_REWARD_TOKENS;
+
+    // Every reward payment as its own event (newest first), and earnings per calendar month for the last 6 months.
+    const nameOf = (r: Referral) => r.referred?.firstName?.trim() || (r.referred ? maskEmail(r.referred.email) : 'A friend');
+    const events: { id: string; friend: string; kind: 'verified' | 'purchase'; tokens: number; at: Date }[] = [];
+    for (const r of counted) {
+      if (r.verifyRewardedAt && Number(r.verifyRewardTokens) > 0) {
+        events.push({ id: `${r.id}:v`, friend: nameOf(r), kind: 'verified', tokens: Number(r.verifyRewardTokens), at: r.verifyRewardedAt });
+      }
+      if (r.purchaseRewardedAt && Number(r.purchaseRewardTokens) > 0) {
+        events.push({ id: `${r.id}:p`, friend: nameOf(r), kind: 'purchase', tokens: Number(r.purchaseRewardTokens), at: r.purchaseRewardedAt });
+      }
+    }
+    events.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+    const now = new Date();
+    const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    const monthly: { month: string; tokens: number; usd: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const key = monthKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1)));
+      const tokens = events.filter((e) => monthKey(new Date(e.at)) === key).reduce((sum, e) => sum + e.tokens, 0);
+      monthly.push({ month: key, tokens, usd: toUsd(tokens) });
+    }
 
     const link = this.linkFor(code);
     return {
@@ -338,17 +372,32 @@ export class ReferralsService {
         friendsJoined: counted.length,
         friendsVerified: counted.filter((r) => r.status === 'VERIFIED' || r.status === 'PURCHASED').length,
         friendsPurchased: counted.filter((r) => r.status === 'PURCHASED').length,
-        tokensEarned: verifyEarned + purchaseEarned,
+        tokensEarned,
         signupRewardsEarned: verifyEarned,
-        signupRewardsRemaining: Math.max(0, REFERRAL_SIGNUP_REWARD_CAP_TOKENS - verifyEarned),
+        signupRewardsRemaining: verifyLeft,
+        // --- tracking extras ---
+        friendsPending: awaitingVerify,
+        friendsNotCounted: rows.length - counted.length,
+        verifyTokensEarned: verifyEarned,
+        purchaseTokensEarned: purchaseEarned,
+        usdEarned: toUsd(tokensEarned),
+        potentialTokens: potentialVerifyTokens + potentialPurchaseTokens,
+        potentialUsd: toUsd(potentialVerifyTokens + potentialPurchaseTokens),
       },
+      pricePerTokenUsd,
+      monthly,
+      recentRewards: events.slice(0, 20).map((e) => ({ ...e, usd: toUsd(e.tokens) })),
       // Friends are shown by first name or a masked address: enough to recognise them, not enough to harvest.
       friends: counted.slice(0, 50).map((r) => ({
         id: r.id,
-        name: r.referred?.firstName?.trim() || (r.referred ? maskEmail(r.referred.email) : 'A friend'),
+        name: nameOf(r),
         status: r.status,
         joinedAt: r.createdAt,
         tokensEarned: Number(r.verifyRewardTokens) + Number(r.purchaseRewardTokens),
+        verifyTokens: Number(r.verifyRewardTokens),
+        purchaseTokens: Number(r.purchaseRewardTokens),
+        verifiedAt: r.verifyRewardedAt ?? null,
+        purchasedAt: r.purchaseRewardedAt ?? null,
       })),
     };
   }
