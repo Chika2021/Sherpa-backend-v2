@@ -34,7 +34,7 @@ export class ActivityService {
   // ---------------------------------------------------------------- helpers
 
   /** Days are cut at midnight in this timezone. `?tz=` per request, else ACTIVITY_TIMEZONE, else UTC. */
-  private resolveTz(tz?: string): string {
+  resolveTz(tz?: string): string {
     const zone = (tz?.trim() || this.config.get<string>('ACTIVITY_TIMEZONE') || 'UTC').trim();
     try {
       new Intl.DateTimeFormat('en-GB', { timeZone: zone });
@@ -44,24 +44,24 @@ export class ActivityService {
     return zone;
   }
 
-  private today(tz: string): string {
+  today(tz: string): string {
     return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date()); // YYYY-MM-DD
   }
 
-  private parseDate(value: string | undefined, label: string): string | undefined {
+  parseDate(value: string | undefined, label: string): string | undefined {
     if (value === undefined || value === '') return undefined;
     const ok = DATE_RE.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().startsWith(value);
     if (!ok) throw new BadRequestException(`${label} must be a real date written YYYY-MM-DD.`);
     return value;
   }
 
-  private addDays(date: string, n: number): string {
+  addDays(date: string, n: number): string {
     const d = new Date(`${date}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() + n);
     return d.toISOString().slice(0, 10);
   }
 
-  private clock(date: Date | null | undefined, tz: string): string | null {
+  clock(date: Date | null | undefined, tz: string): string | null {
     if (!date) return null;
     return new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
   }

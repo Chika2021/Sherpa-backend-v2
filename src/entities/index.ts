@@ -22,6 +22,7 @@ export * from './local-job-board.entity';
 export * from './support-ticket.entity';
 export * from './support-message.entity';
 export * from './user-session.entity';
+export * from './page-view.entity';
 export * from './referral.entity';
 export * from './posted-job.entity';
 export * from './consultation.entity';
@@ -53,6 +54,7 @@ import { LocalJobBoard } from './local-job-board.entity';
 import { SupportTicket } from './support-ticket.entity';
 import { SupportMessage } from './support-message.entity';
 import { UserSession } from './user-session.entity';
+import { PageView } from './page-view.entity';
 import { Referral } from './referral.entity';
 import { Notification } from './notification.entity';
 import { AccountFlag } from './account-flag.entity';
@@ -86,6 +88,7 @@ export const ALL_ENTITIES = [
   SupportTicket,
   SupportMessage,
   UserSession,
+  PageView,
   Referral,
   Notification,
   AccountFlag,

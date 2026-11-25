@@ -9,6 +9,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { AdminService } from './admin.service';
 import { AppInfoService } from './app-info.service';
 import { ActivityService } from './activity.service';
+import { PageAnalyticsService } from './page-analytics.service';
 import { CreateUserDto, DeductTokensDto, GrantTokensDto, ListPaymentsQueryDto, ListUsersQueryDto, UpdateUserDto } from './admin.dto';
 
 /**
@@ -17,7 +18,8 @@ import { CreateUserDto, DeductTokensDto, GrantTokensDto, ListPaymentsQueryDto, L
  *   create, update, delete users                    MANAGEMENT (user/tester/staff only), SUPER_ADMIN
  *   payments (how much was paid, and by whom)       MANAGEMENT, SUPER_ADMIN
  *   add / subtract tokens, App info (/system),
- *   user activity (logins per day, time in app)     SUPER_ADMIN only
+ *   user activity (logins per day, time in app),
+ *   page analytics (pages each user opened, most visited) SUPER_ADMIN only
  *   local job boards (create/read/update/delete)    ADMIN, SUPER_ADMIN (see LocalJobBoardsController)
  * STAFF has its own countdown-only endpoints (CountdownController); the helpdesk is in SupportAdminController.
  */
@@ -30,6 +32,7 @@ export class AdminController {
     private admin: AdminService,
     private appInfo: AppInfoService,
     private activity: ActivityService,
+    private pageAnalytics: PageAnalyticsService,
     private realtime: RealtimeService,
   ) {}
 
@@ -76,6 +79,34 @@ export class AdminController {
   @Get('users/:id/activity')
   userActivity(@Param('id') id: string, @Query() q: { limit?: string; tz?: string }) {
     return this.activity.forUser(id, q);
+  }
+
+  /** Which pages get the most attention: views, unique users, share of traffic. ?from=&to=&tz=&role=&limit=25 (default: last 7 days) */
+  @Roles('SUPER_ADMIN')
+  @Get('analytics/pages')
+  topPages(@Query() q: { from?: string; to?: string; tz?: string; role?: string; limit?: string }) {
+    return this.pageAnalytics.topPages(q);
+  }
+
+  /** Views per day of one page. ?page=/dashboard/jobs/:id&from=&to=&tz= */
+  @Roles('SUPER_ADMIN')
+  @Get('analytics/pages/trend')
+  pageTrend(@Query() q: { page?: string; from?: string; to?: string; tz?: string }) {
+    return this.pageAnalytics.pageTrend(q);
+  }
+
+  /** Pages opened by everyone on one day, grouped by user. ?date=YYYY-MM-DD&tz=&search=&role= */
+  @Roles('SUPER_ADMIN')
+  @Get('analytics/day')
+  pagesDay(@Query() q: { date?: string; tz?: string; search?: string; role?: string }) {
+    return this.pageAnalytics.day(q);
+  }
+
+  /** Every page one user opened, newest first. ?from=&to=&tz=&search=&page=1&pageSize=100 */
+  @Roles('SUPER_ADMIN')
+  @Get('users/:id/pages')
+  userPages(@Param('id') id: string, @Query() q: { from?: string; to?: string; tz?: string; page?: string; pageSize?: string; search?: string }) {
+    return this.pageAnalytics.forUser(id, q);
   }
 
   /**
