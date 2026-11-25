@@ -23,6 +23,10 @@ export * from './support-ticket.entity';
 export * from './support-message.entity';
 export * from './user-session.entity';
 export * from './referral.entity';
+export * from './posted-job.entity';
+export * from './consultation.entity';
+export * from './consultation-enrollment.entity';
+export * from './consultation-session.entity';
 export * from './notification.entity';
 export * from './account-flag.entity';
 export * from './user-warning.entity';
@@ -53,6 +57,10 @@ import { Referral } from './referral.entity';
 import { Notification } from './notification.entity';
 import { AccountFlag } from './account-flag.entity';
 import { UserWarning } from './user-warning.entity';
+import { PostedJob } from './posted-job.entity';
+import { Consultation } from './consultation.entity';
+import { ConsultationEnrollment } from './consultation-enrollment.entity';
+import { ConsultationSession } from './consultation-session.entity';
 
 /** Every entity, in one place - used by both the Nest connection and the TypeORM CLI data source. */
 export const ALL_ENTITIES = [
@@ -82,4 +90,8 @@ export const ALL_ENTITIES = [
   Notification,
   AccountFlag,
   UserWarning,
+  PostedJob,
+  Consultation,
+  ConsultationEnrollment,
+  ConsultationSession,
 ];

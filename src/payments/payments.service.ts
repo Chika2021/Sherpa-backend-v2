@@ -23,9 +23,18 @@ import { MonitoringService } from '../monitoring/monitoring.service';
  * worth" - the price IS the value, and the margin is simply the difference
  * between $0.15 and what a Gemini call actually costs us.
  */
+/**
+ * What a purpose handler decides once a payment for it is verified: 'OK' = the thing was delivered (the payment is
+ * kept), 'REFUND' = it can no longer be delivered (the payment is refunded in full).
+ */
+export type PurposeOutcome = 'OK' | 'REFUND';
+export type PurposeHandler = (transaction: PaymentTransaction) => Promise<PurposeOutcome>;
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
+  /** Feature modules (e.g. consultations) register here, so PaymentsService never has to import them. */
+  private readonly purposeHandlers = new Map<PaymentTransaction['purpose'], PurposeHandler>();
 
   constructor(
     @InjectRepository(PaymentTransaction) private transactions: Repository<PaymentTransaction>,
@@ -207,6 +216,109 @@ export class PaymentsService {
     };
   }
 
+  /**
+   * Lets a feature deliver what was paid for. It is called (once per verified payment, idempotently) from
+   * finalizeTransaction BEFORE the transaction is marked SUCCESS: if it throws, the payment stays PENDING and the
+   * next webhook retry / verify call tries again.
+   */
+  registerPurposeHandler(purpose: PaymentTransaction['purpose'], handler: PurposeHandler) {
+    this.purposeHandlers.set(purpose, handler);
+  }
+
+  /**
+   * Starts a payment for a place in one consultation (a flat USD price set by the seller). Same Paystack checkout
+   * and callback as a token purchase; no tokens are involved. The enrolment itself is created by the consultations
+   * module when the payment is verified (see registerPurposeHandler).
+   */
+  async initializeConsultation(userId: string, consultationId: string, amountUsd: number, currencyInput?: string) {
+    assertValidId(userId, 'User');
+    assertValidId(consultationId, 'Consultation');
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user) throw new NotFoundException('User not found');
+
+    const currency = (currencyInput || this.defaultCurrency()).toUpperCase();
+    if (!this.exchangeRates.isSupported(currency)) {
+      throw new BadRequestException(
+        `Currency "${currency}" is not supported. Supported: ${this.exchangeRates.supportedCurrencies().join(', ')}`,
+      );
+    }
+    const amount = currency === 'USD' ? amountUsd : this.exchangeRates.toCurrency(amountUsd, currency);
+    const reference = `con_${userId}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+
+    const transaction = await this.transactions.save(this.transactions.create({
+      userId,
+      payerEmail: user.email,
+      payerName: [user.firstName, user.lastName].filter(Boolean).join(' ') || null,
+      reference,
+      tokensRequested: 0,
+      packageId: null,
+      pricePerTokenUsd: this.tokens.pricing().pricePerTokenUsd,
+      amountUsd,
+      amount,
+      currency,
+      status: 'PENDING',
+      purpose: 'CONSULTATION',
+      purposeRef: consultationId,
+    }));
+
+    const paystackRes = await this.paystack.initializeTransaction({
+      email: user.email,
+      amount: Math.round(amount * 100),
+      currency,
+      reference,
+      callback_url: this.config.get<string>('PAYMENT_CALLBACK_URL'),
+      metadata: { userId, purpose: 'CONSULTATION', consultationId, transactionId: transaction.id },
+    });
+
+    return {
+      reference,
+      amount,
+      amountUsd,
+      currency,
+      authorizationUrl: paystackRes.data.authorization_url,
+      accessCode: paystackRes.data.access_code,
+    };
+  }
+
+  /**
+   * If the buyer closed the tab before the Paystack redirect, the webhook may be the only thing that confirms the
+   * payment - and may be delayed. This settles this user's still-PENDING payments for one thing (a consultation, say)
+   * on the spot. Never throws.
+   */
+  async settlePending(userId: string, purpose: PaymentTransaction['purpose'], purposeRef: string) {
+    assertValidId(userId, 'User');
+    const pending = await this.transactions.find({
+      where: { userId, purpose, purposeRef, status: 'PENDING' },
+      order: { createdAt: 'DESC' },
+      take: 3,
+    });
+    for (const tx of pending) {
+      try {
+        await this.finalizeTransaction(tx.reference);
+      } catch (err) {
+        this.logger.warn(`Could not settle ${tx.reference}: ${err}`);
+      }
+    }
+  }
+
+  /**
+   * Gives a successful payment back to the payer in full (through Paystack) and marks it REFUNDED. Safe to call
+   * twice. Throws if Paystack refuses, so a caller that must not lose the refund (a cancelled consultation) can stop.
+   */
+  async refundTransaction(reference: string) {
+    const transaction = await this.transactions.findOneBy({ reference });
+    if (!transaction) throw new NotFoundException('Transaction not found');
+    if (transaction.status === 'REFUNDED') return transaction;
+    if (transaction.status !== 'SUCCESS' && transaction.status !== 'PENDING') {
+      throw new BadRequestException('Only a successful payment can be refunded.');
+    }
+    await this.paystack.refundTransaction(reference);
+    transaction.status = 'REFUNDED';
+    await this.transactions.save(transaction);
+    this.logger.log(`Refunded ${transaction.currency} ${transaction.amount} for ${reference}`);
+    return transaction;
+  }
+
   /** The most recent successful internship-document payment this user made for this course, if any. */
   async findPaidInternshipDocument(userId: string, skillTutorialId: string) {
     assertValidId(userId, 'User');
@@ -248,7 +360,7 @@ export class PaymentsService {
     const transaction = await this.transactions.findOneBy({ reference });
     if (!transaction) throw new NotFoundException('Transaction not found');
 
-    if (transaction.status === 'SUCCESS') {
+    if (transaction.status === 'SUCCESS' || transaction.status === 'REFUNDED') {
       return transaction; // already processed
     }
 
@@ -288,6 +400,43 @@ export class PaymentsService {
           `${paidCurrency} ${paidAmountMajor.toFixed(2)}`,
         );
         throw new BadRequestException('Payment verification mismatch');
+      }
+
+      // A consultation payment credits no tokens: the consultations module turns it into an enrolment. If the place
+      // can no longer be given (the consultation ended, was cancelled or filled up meanwhile) the payment is refunded.
+      if (transaction.purpose === 'CONSULTATION') {
+        const handler = this.purposeHandlers.get('CONSULTATION');
+        if (!handler) throw new Error('Consultations are not ready to take payments yet.'); // stays PENDING; retried
+        const outcome = await handler(transaction);
+
+        if (outcome === 'REFUND') {
+          await this.paystack.refundTransaction(reference);
+          transaction.status = 'REFUNDED';
+          await this.transactions.save(transaction);
+          this.logger.warn(`Consultation payment ${reference} refunded: the place could not be given.`);
+          if (wasPending) {
+            void this.notifications.notify(transaction.userId, {
+              type: 'PAYMENT',
+              title: 'Payment refunded',
+              body: 'Your payment came through, but that consultation is no longer available (it ended, was cancelled or is full), so it was refunded to you in full.',
+              link: '/consultations',
+              meta: { reference },
+            });
+          }
+          return transaction;
+        }
+
+        transaction.status = 'SUCCESS';
+        await this.transactions.save(transaction);
+        this.logger.log(`Consultation ${transaction.purposeRef} paid by user ${transaction.userId} (${reference})`);
+        void this.notifications.notify(transaction.userId, {
+          type: 'PAYMENT',
+          title: 'Payment received',
+          body: 'Your payment was successful and your place in the consultation is confirmed.',
+          link: '/consultations',
+          meta: { reference },
+        });
+        return transaction;
       }
 
       // An internship-document payment credits nothing - the SUCCESS row itself unlocks the download.

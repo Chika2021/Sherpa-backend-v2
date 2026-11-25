@@ -33,6 +33,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { ReferralsModule } from './referrals/referrals.module';
+import { PostedJobsModule } from './posted-jobs/posted-jobs.module';
+import { ConsultationsModule } from './consultations/consultations.module';
 
 @Module({
   imports: [
@@ -69,6 +71,8 @@ import { ReferralsModule } from './referrals/referrals.module';
     MonitoringModule,
     TokensModule,
     ReferralsModule,
+    PostedJobsModule,
+    ConsultationsModule,
     PaymentsModule,
     CredentialsModule,
     InterviewPrepModule,

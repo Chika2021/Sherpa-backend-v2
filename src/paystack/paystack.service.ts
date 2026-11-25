@@ -90,6 +90,25 @@ export class PaystackService {
   }
 
   /**
+   * Refunds a successful transaction in full (https://paystack.com/docs/api/refund/). The money goes back to the
+   * payer's card/bank in the currency they paid in; Paystack may take a few days to settle it.
+   */
+  async refundTransaction(reference: string): Promise<{ status: boolean; message: string; data: Record<string, any> }> {
+    const res = await fetch(`${this.baseUrl}/refund`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify({ transaction: reference }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.status) {
+      this.logger.error(`Paystack refund failed for ${reference}: ${res.status} ${JSON.stringify(data)}`);
+      throw new BadGatewayException(data.message || 'Failed to refund the payment with Paystack');
+    }
+    return data;
+  }
+
+  /**
    * Validates the `x-paystack-signature` header against the raw request body,
    * per https://paystack.com/docs/payments/webhooks/#verifying-events -
    * required so nothing except Paystack itself can trigger a webhook-driven

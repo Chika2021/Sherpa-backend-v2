@@ -2,7 +2,7 @@ import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, Primary
 import { SerializableEntity } from './serializable.entity';
 import { User } from './user.entity';
 
-export const TRANSACTION_STATUSES = ['PENDING', 'SUCCESS', 'FAILED', 'ABANDONED'] as const;
+export const TRANSACTION_STATUSES = ['PENDING', 'SUCCESS', 'FAILED', 'ABANDONED', 'REFUNDED'] as const;
 export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number];
 
 /** One real-money token purchase through Paystack. */
@@ -59,9 +59,11 @@ export class PaymentTransaction extends SerializableEntity {
   // What this payment is FOR. 'TOKENS' buys wallet tokens. 'INTERNSHIP_DOCUMENT'
   // pays for the downloadable internship document of one skill course: no
   // tokens are credited, and `purposeRef` is that SkillTutorial's id.
+  // 'CONSULTATION' pays for a place in one consultation: no tokens either, and
+  // `purposeRef` is that Consultation's id (the enrolment is created when the payment is verified).
   @Index()
   @Column({ type: 'text', default: 'TOKENS' })
-  purpose: 'TOKENS' | 'INTERNSHIP_DOCUMENT';
+  purpose: 'TOKENS' | 'INTERNSHIP_DOCUMENT' | 'CONSULTATION';
 
   @Index()
   @Column({ type: 'text', nullable: true, default: null })

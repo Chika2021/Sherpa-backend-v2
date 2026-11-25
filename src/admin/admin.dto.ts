@@ -17,7 +17,7 @@ export class ListUsersQueryDto {
 export class ListPaymentsQueryDto {
   @IsOptional() @IsString() @MaxLength(100) search?: string;
   @IsOptional() @IsIn(TRANSACTION_STATUSES as unknown as string[]) status?: (typeof TRANSACTION_STATUSES)[number];
-  @IsOptional() @IsIn(['TOKENS', 'INTERNSHIP_DOCUMENT']) purpose?: 'TOKENS' | 'INTERNSHIP_DOCUMENT';
+  @IsOptional() @IsIn(['TOKENS', 'INTERNSHIP_DOCUMENT', 'CONSULTATION']) purpose?: 'TOKENS' | 'INTERNSHIP_DOCUMENT' | 'CONSULTATION';
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
 }
