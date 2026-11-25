@@ -35,12 +35,17 @@
   .visits { color:var(--muted); font-size:13px; white-space:normal; max-width:340px; }
   .stats { display:flex; gap:24px; flex-wrap:wrap; margin:4px 0 14px; } .stats b { display:block; font-size:20px; } .stats span { color:var(--muted); font-size:13px; }
   td.nowrap { white-space:nowrap; }
+  select { padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+  .bar { height:6px; border-radius:99px; background:var(--line); margin-top:6px; width:220px; max-width:100%; overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
+  .path { white-space:normal; word-break:break-all; font-weight:600; } .small { font-size:12.5px; color:var(--muted); }
+  .chip { display:inline-block; border:1px solid var(--line); border-radius:99px; padding:2px 10px; font-size:12.5px; margin:0 6px 6px 0; word-break:break-all; }
+  button.sm { padding:5px 10px; font-size:13px; }
 </style>
 </head>
 <body>
 <main>
   <div class="top">
-    <div><h1>User activity</h1><p class="sub">Who logged in each day, when, and how long they stayed in the app</p></div>
+    <div><h1>User activity</h1><p class="sub">Who logged in each day, how long they stayed, which pages they opened, and which pages get the most traffic</p></div>
     <button id="back" class="ghost" type="button">&larr; Back</button>
   </div>
 
@@ -51,6 +56,43 @@
   </section>
 
   <section id="app" class="hidden">
+    <div class="card">
+      <div class="top"><strong>Most visited pages</strong>
+        <select id="topRange" aria-label="Time range"><option value="1">Today</option><option value="7" selected>Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select>
+      </div>
+      <div class="stats" style="margin-top:12px">
+        <div><b id="tpTop" style="font-size:16px;word-break:break-all">—</b><span>top page</span></div>
+        <div><b id="tpViews">0</b><span>page views</span></div>
+        <div><b id="tpUsers">0</b><span>users who browsed</span></div>
+      </div>
+      <div id="topMsg"></div>
+      <div class="tablewrap">
+        <table><thead><tr><th>#</th><th>Page</th><th>Views</th><th>Users</th><th>Share</th><th>Last opened</th></tr></thead><tbody id="topBody"></tbody></table>
+        <div id="topEmpty" class="empty hidden">No page views recorded in this range yet.</div>
+      </div>
+      <p class="small" style="margin:8px 0 0">Pages with an id in the address (a job, a resume...) are grouped as <code>:id</code>.</p>
+    </div>
+
+    <div class="card hidden" id="pagesCard" style="border-color:var(--accent)">
+      <div class="top">
+        <div><strong id="pgName"></strong><div class="small" id="pgEmail"></div></div>
+        <div class="row" style="align-items:center">
+          <select id="pgRange" aria-label="Range"><option value="day">Selected day</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select>
+          <input id="pgFilter" type="search" placeholder="Filter pages, e.g. /jobs" style="width:200px">
+          <button id="pgClose" class="ghost sm" type="button">Close</button>
+        </div>
+      </div>
+      <div id="pgFav" style="margin-top:12px"></div>
+      <div id="pgMsg"></div>
+      <div class="tablewrap">
+        <table><thead><tr><th>When</th><th>Page</th></tr></thead><tbody id="pgBody"></tbody></table>
+        <div id="pgEmpty" class="empty hidden">This user opened no tracked pages in this range.</div>
+      </div>
+      <div class="top" style="margin-top:10px"><span class="small" id="pgCount"></span>
+        <div class="row" style="align-items:center"><button id="pgPrev" class="ghost sm" type="button">Previous</button><span class="small" id="pgPage"></span><button id="pgNext" class="ghost sm" type="button">Next</button></div>
+      </div>
+    </div>
+
     <div class="card tablewrap">
       <strong>Last 14 days</strong>
       <table style="margin-top:8px"><thead><tr><th>Day</th><th>Users</th><th>Visits</th><th>Total time</th><th>Avg per visit</th></tr></thead><tbody id="days"></tbody></table>
@@ -69,7 +111,7 @@
         <div><b id="sOnline">0</b><span>online now</span></div>
       </div>
       <div class="tablewrap">
-        <table><thead><tr><th>User</th><th>Role</th><th>First login</th><th>Last seen</th><th>Time in app</th><th>Visits</th></tr></thead><tbody id="users"></tbody></table>
+        <table><thead><tr><th>User</th><th>Role</th><th>First login</th><th>Last seen</th><th>Time in app</th><th>Visits</th><th>Pages</th></tr></thead><tbody id="users"></tbody></table>
         <div id="empty" class="empty hidden">Nobody was active on this day.</div>
       </div>
     </div>
@@ -181,7 +223,10 @@
         tr.appendChild(td(u.totalDuration, 'num'));
         var v = document.createElement('td'); v.className = 'visits';
         v.textContent = u.sessionCount + (u.sessionCount === 1 ? ' visit: ' : ' visits: ') + u.sessions.map(function (s) { return s.loginTime + '–' + s.leftTime + ' (' + s.duration + ')'; }).join(', ');
-        tr.appendChild(v); body.appendChild(tr);
+        tr.appendChild(v);
+        var pc = document.createElement('td'); var pb = document.createElement('button'); pb.type = 'button'; pb.className = 'sm'; pb.textContent = 'View pages';
+        pb.onclick = function () { openUserPages(u); }; pc.appendChild(pb); tr.appendChild(pc);
+        body.appendChild(tr);
       });
       loadDaysHighlight();
     }).catch(function (e) { msg($('dayMsg'), e.message); });
@@ -191,7 +236,65 @@
   $('date').onchange = loadDay;
   $('search').oninput = function () { clearTimeout(timer); timer = setTimeout(loadDay, 300); };
 
-  function enterApp() { show($('nosession'), false); show($('app'), true); loadDays(); }
+  // ---- Page analytics: most visited pages, and every page one user opened ----
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function lastDays(n) { var to = new Date(), from = new Date(); from.setDate(from.getDate() - (n - 1)); return { from: ymd(from), to: ymd(to) }; }
+  function whenStr(iso) { return new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); }
+  function bar(pct) { var b = document.createElement('div'); b.className = 'bar'; var i = document.createElement('i'); i.style.width = Math.max(0, Math.min(100, pct)) + '%'; b.appendChild(i); return b; }
+
+  function loadTop() {
+    var r = lastDays(Number($('topRange').value)); msg($('topMsg'), '');
+    api('/admin/analytics/pages?from=' + r.from + '&to=' + r.to + '&limit=30' + tzq).then(function (res) {
+      $('tpTop').textContent = res.mostVisited || '—'; $('tpViews').textContent = res.totals.views.toLocaleString(); $('tpUsers').textContent = res.totals.uniqueUsers.toLocaleString();
+      var body = $('topBody'); body.textContent = ''; show($('topEmpty'), res.pages.length === 0);
+      var max = res.pages.length ? res.pages[0].views : 0;
+      res.pages.forEach(function (p) {
+        var tr = document.createElement('tr');
+        tr.appendChild(td(String(p.rank), 'nowrap'));
+        var c = document.createElement('td'); var t = document.createElement('div'); t.className = 'path'; t.textContent = p.page; c.appendChild(t); c.appendChild(bar(max ? p.views / max * 100 : 0)); tr.appendChild(c);
+        tr.appendChild(td(p.views.toLocaleString(), 'num')); tr.appendChild(td(p.uniqueUsers.toLocaleString(), 'num'));
+        tr.appendChild(td(p.sharePercent + '%', 'num')); tr.appendChild(td(whenStr(p.lastOpenedAt), 'nowrap'));
+        body.appendChild(tr);
+      });
+    }).catch(function (e) { msg($('topMsg'), e.message); });
+  }
+  $('topRange').onchange = loadTop;
+
+  var pgUser = null, pgPage = 1, pgTimer = null;
+  function openUserPages(u) {
+    pgUser = u; pgPage = 1; $('pgFilter').value = '';
+    $('pgName').textContent = u.name === u.email ? u.email : u.name; $('pgEmail').textContent = u.email;
+    show($('pagesCard'), true); loadUserPages();
+    $('pagesCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function loadUserPages() {
+    if (!pgUser) return; msg($('pgMsg'), '');
+    var sel = $('pgRange').value, r = sel === 'day' ? { from: chosen || ymd(new Date()), to: chosen || ymd(new Date()) } : lastDays(Number(sel));
+    var q = '/admin/users/' + encodeURIComponent(pgUser.userId) + '/pages?from=' + r.from + '&to=' + r.to + '&page=' + pgPage + '&pageSize=50' + tzq +
+      ($('pgFilter').value.trim() ? '&search=' + encodeURIComponent($('pgFilter').value.trim()) : '');
+    api(q).then(function (res) {
+      var fav = $('pgFav'); fav.textContent = '';
+      res.favouritePages.slice(0, 6).forEach(function (f) { var s = document.createElement('span'); s.className = 'chip'; s.textContent = f.page + ' · ' + f.views; fav.appendChild(s); });
+      var body = $('pgBody'); body.textContent = ''; show($('pgEmpty'), res.views.length === 0);
+      res.views.forEach(function (v) {
+        var tr = document.createElement('tr'); tr.appendChild(td(v.date + ' · ' + (v.time || ''), 'nowrap'));
+        var c = document.createElement('td'); var t = document.createElement('div'); t.className = 'path'; t.textContent = v.path; c.appendChild(t);
+        if (v.title) { var tt = document.createElement('div'); tt.className = 'small'; tt.textContent = v.title; c.appendChild(tt); }
+        tr.appendChild(c); body.appendChild(tr);
+      });
+      var pages = Math.max(1, Math.ceil(res.total / res.pageSize));
+      $('pgCount').textContent = res.total.toLocaleString() + ' page views'; $('pgPage').textContent = pgPage + ' / ' + pages;
+      $('pgPrev').disabled = pgPage <= 1; $('pgNext').disabled = pgPage >= pages;
+    }).catch(function (e) { msg($('pgMsg'), e.message); });
+  }
+  $('pgRange').onchange = function () { pgPage = 1; loadUserPages(); };
+  $('pgFilter').oninput = function () { clearTimeout(pgTimer); pgTimer = setTimeout(function () { pgPage = 1; loadUserPages(); }, 300); };
+  $('pgPrev').onclick = function () { pgPage--; loadUserPages(); };
+  $('pgNext').onclick = function () { pgPage++; loadUserPages(); };
+  $('pgClose').onclick = function () { pgUser = null; show($('pagesCard'), false); };
+
+  function enterApp() { show($('nosession'), false); show($('app'), true); loadTop(); loadDays(); }
 
   show($('nosession'), true);
   tryTokens(candidateTokens()).then(enterApp).catch(function () { noSession(); });
