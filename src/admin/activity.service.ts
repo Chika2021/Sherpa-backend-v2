@@ -235,4 +235,103 @@ export class ActivityService {
     const sessions = rows.map((r) => ({ date: r.date, ...this.shape(r, tz, now) }));
     return { timezone: tz, sessions };
   }
+
+  // ---------------------------------------------------------------- storage & cleanup
+
+  /** How much room the activity data takes: rows, size on disk and oldest record, for page views and for login visits. */
+  async storage() {
+    const [r]: any[] = await this.ds.query(
+      `SELECT (SELECT COUNT(*) FROM page_views)::int AS pv_rows,
+              pg_total_relation_size('page_views')::float AS pv_bytes,
+              (SELECT MIN("createdAt") FROM page_views) AS pv_oldest,
+              (SELECT COUNT(*) FROM user_sessions)::int AS vs_rows,
+              pg_total_relation_size('user_sessions')::float AS vs_bytes,
+              (SELECT MIN("loginAt") FROM user_sessions) AS vs_oldest`,
+    );
+    return {
+      pageViews: { rows: r.pv_rows, bytes: Math.round(r.pv_bytes), oldest: r.pv_oldest ?? null },
+      logins: { rows: r.vs_rows, bytes: Math.round(r.vs_bytes), oldest: r.vs_oldest ?? null },
+      totalBytes: Math.round(r.pv_bytes + r.vs_bytes),
+    };
+  }
+
+  /**
+   * Deletes recorded activity to free database space. Super admin only, and refused unless ?confirm=DELETE.
+   *   target         all (default) | pages (page views only) | logins (login visits only)
+   *   olderThanDays  omit for EVERYTHING, or a number of days to keep only the most recent ones
+   * Visits that are still open (the user is online right now) are always kept, so live tracking is not disturbed.
+   * Page views are not part of any report except the activity pages, so nothing else in the app is affected.
+   */
+  async clear(query: { target?: string; olderThanDays?: string; confirm?: string }) {
+    if (query.confirm !== 'DELETE') {
+      throw new BadRequestException('Add confirm=DELETE to really delete the activity data. This cannot be undone.');
+    }
+    const target = (query.target || 'all').toLowerCase();
+    if (!['all', 'pages', 'logins'].includes(target)) throw new BadRequestException('target must be all, pages or logins.');
+
+    let days: number | null = null;
+    if (query.olderThanDays !== undefined && query.olderThanDays !== '' && query.olderThanDays !== '0') {
+      days = Number(query.olderThanDays);
+      if (!Number.isInteger(days) || days < 1 || days > 3650) {
+        throw new BadRequestException('olderThanDays must be a whole number from 1 to 3650 (or leave it out to delete everything).');
+      }
+    }
+
+    let pageViews = 0;
+    let logins = 0;
+    const vacuum: string[] = [];
+
+    if (target === 'all' || target === 'pages') {
+      if (days === null) {
+        const [{ n }]: any[] = await this.ds.query(`SELECT COUNT(*)::int AS n FROM page_views`);
+        pageViews = n;
+        // TRUNCATE hands the disk space straight back; fall back to DELETE if the database user may not truncate.
+        try {
+          await this.ds.query(`TRUNCATE TABLE page_views`);
+        } catch {
+          await this.ds.query(`DELETE FROM page_views`);
+          vacuum.push('page_views');
+        }
+      } else {
+        const [{ n }]: any[] = await this.ds.query(
+          `WITH d AS (DELETE FROM page_views WHERE "createdAt" < now() - ($1::int * interval '1 day') RETURNING 1) SELECT COUNT(*)::int AS n FROM d`,
+          [days],
+        );
+        pageViews = n;
+        vacuum.push('page_views');
+      }
+    }
+
+    if (target === 'all' || target === 'logins') {
+      const idleMinutes = SESSION_IDLE_MS / 60_000;
+      const [{ n }]: any[] = await this.ds.query(
+        `WITH d AS (
+           DELETE FROM user_sessions
+            WHERE ("endedAt" IS NOT NULL OR "lastSeenAt" < now() - ($1::int * interval '1 minute'))
+              AND ($2::int IS NULL OR "loginAt" < now() - ($2::int * interval '1 day'))
+           RETURNING 1)
+         SELECT COUNT(*)::int AS n FROM d`,
+        [idleMinutes, days],
+      );
+      logins = n;
+      vacuum.push('user_sessions');
+    }
+
+    // A plain DELETE only marks space as reusable; VACUUM FULL gives it back to the disk. Best effort.
+    let spaceReturned = true;
+    for (const table of vacuum) {
+      try {
+        await this.ds.query(`VACUUM FULL ${table}`);
+      } catch {
+        spaceReturned = false;
+      }
+    }
+
+    return {
+      deleted: { pageViews, logins },
+      scope: { target, olderThanDays: days },
+      spaceReturnedToDisk: spaceReturned,
+      storage: await this.storage(),
+    };
+  }
 }

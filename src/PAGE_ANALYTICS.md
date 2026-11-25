@@ -43,3 +43,12 @@ Super admin only:
 | `GET /admin/analytics/day?date=&tz=&search=&role=` | Everyone's pages for one day, grouped by user |
 
 Ids in paths (uuids, numbers) are grouped as `:id`, so `/dashboard/jobs/abc` and `/dashboard/jobs/xyz` count as one page `/dashboard/jobs/:id` in the rankings; the user view still shows the exact path.
+
+## Clearing activity to free space (super admin)
+`GET /admin/activity/storage` - rows, size on disk and oldest record for page views and login visits.
+
+`DELETE /admin/activity?confirm=DELETE` - deletes ALL recorded activity (page views and login visits). Cannot be undone.
+- `&target=pages` or `&target=logins` limits it to one kind (default `all`).
+- `&olderThanDays=90` keeps the last 90 days and deletes only older records.
+- Visits that are still open (user online now) are kept. Disk space is handed back right away (TRUNCATE / VACUUM FULL).
+The "User activity" page in the backend dashboard has a "Storage and cleanup" card that does this with a button.

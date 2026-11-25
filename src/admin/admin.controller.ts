@@ -81,6 +81,23 @@ export class AdminController {
     return this.activity.forUser(id, q);
   }
 
+  /** How much space the activity data uses (page views and login visits): rows, bytes, oldest record. */
+  @Roles('SUPER_ADMIN')
+  @Get('activity/storage')
+  activityStorage() {
+    return this.activity.storage();
+  }
+
+  /**
+   * Delete recorded activity to free space. ?confirm=DELETE is required.
+   * ?target=all|pages|logins (default all) and ?olderThanDays=N (omit to delete everything). Cannot be undone.
+   */
+  @Roles('SUPER_ADMIN')
+  @Delete('activity')
+  clearActivity(@Query() q: { target?: string; olderThanDays?: string; confirm?: string }) {
+    return this.activity.clear(q);
+  }
+
   /** Which pages get the most attention: views, unique users, share of traffic. ?from=&to=&tz=&role=&limit=25 (default: last 7 days) */
   @Roles('SUPER_ADMIN')
   @Get('analytics/pages')
