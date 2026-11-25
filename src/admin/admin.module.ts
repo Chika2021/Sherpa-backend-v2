@@ -6,6 +6,7 @@ import { CountdownController } from './countdown.controller';
 import { AdminService } from './admin.service';
 import { ActivityService } from './activity.service';
 import { PageAnalyticsService } from './page-analytics.service';
+import { StorageUsageService } from './storage-usage.service';
 import { PageTrackController } from './page-track.controller';
 import { AdminBootstrapService } from './admin-bootstrap.service';
 import { AppInfoService } from './app-info.service';
@@ -16,7 +17,7 @@ import { LocalJobBoardsService } from './local-job-boards.service';
 @Module({
   imports: [EntitiesModule, AiModule],
   controllers: [AdminController, CountdownController, LocalJobBoardsController, PageTrackController],
-  providers: [AdminService, ActivityService, PageAnalyticsService, AppInfoService, AdminBootstrapService, LocalJobBoardsService],
+  providers: [AdminService, ActivityService, PageAnalyticsService, StorageUsageService, AppInfoService, AdminBootstrapService, LocalJobBoardsService],
   exports: [AdminService],
 })
 export class AdminModule {}

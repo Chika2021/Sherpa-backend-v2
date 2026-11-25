@@ -52,3 +52,14 @@ Ids in paths (uuids, numbers) are grouped as `:id`, so `/dashboard/jobs/abc` and
 - `&olderThanDays=90` keeps the last 90 days and deletes only older records.
 - Visits that are still open (user online now) are kept. Disk space is handed back right away (TRUNCATE / VACUUM FULL).
 The "User activity" page in the backend dashboard has a "Storage and cleanup" card that does this with a button.
+
+## Total app storage (super admin)
+`GET /admin/storage` (dashboard page: `/admin/storage.html`) returns:
+- the grand total (database + files on the server) and the server disk (when the platform reports it)
+- the database total, how much is your tables vs. system, and `% of limit` if `DB_STORAGE_LIMIT_MB` is set
+- **space per feature** (Resumes, Applications, User activity, Payments...) with each feature's tables: size, data, indexes, rows, average row size, dead rows, last clean-up. Which table belongs to which feature is in `src/admin/storage-features.ts`; a table not listed there shows under "Other", so the total is always complete
+- the uploads / generated / audio / dashboard folders
+- growth over time (7 and 30 days, average per day, days until your limit) from readings taken about every 6 hours into the `storage_snapshots` table
+
+Run `npm run db:sync` once to create `storage_snapshots` (the page works without it, just without the growth chart).
+`?deep=1` also counts `node_modules` and `dist`; `?refresh=1` skips the one-minute cache.

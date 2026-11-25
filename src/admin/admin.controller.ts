@@ -10,6 +10,7 @@ import { AdminService } from './admin.service';
 import { AppInfoService } from './app-info.service';
 import { ActivityService } from './activity.service';
 import { PageAnalyticsService } from './page-analytics.service';
+import { StorageUsageService } from './storage-usage.service';
 import { CreateUserDto, DeductTokensDto, GrantTokensDto, ListPaymentsQueryDto, ListUsersQueryDto, UpdateUserDto } from './admin.dto';
 
 /**
@@ -33,6 +34,7 @@ export class AdminController {
     private appInfo: AppInfoService,
     private activity: ActivityService,
     private pageAnalytics: PageAnalyticsService,
+    private storageUsage: StorageUsageService,
     private realtime: RealtimeService,
   ) {}
 
@@ -79,6 +81,16 @@ export class AdminController {
   @Get('users/:id/activity')
   userActivity(@Param('id') id: string, @Query() q: { limit?: string; tz?: string }) {
     return this.activity.forUser(id, q);
+  }
+
+  /**
+   * Total space the app uses: the database (total and per table) plus the uploads / generated / audio / dashboard folders.
+   * ?deep=1 also counts node_modules and dist (slower). ?refresh=1 skips the one-minute cache. Super admin only.
+   */
+  @Roles('SUPER_ADMIN')
+  @Get('storage')
+  storageOverview(@Query() q: { deep?: string; refresh?: string }) {
+    return this.storageUsage.usage({ deep: q.deep === '1' || q.deep === 'true', refresh: q.refresh === '1' || q.refresh === 'true' });
   }
 
   /** How much space the activity data uses (page views and login visits): rows, bytes, oldest record. */

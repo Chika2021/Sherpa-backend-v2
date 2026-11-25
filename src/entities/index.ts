@@ -23,6 +23,7 @@ export * from './support-ticket.entity';
 export * from './support-message.entity';
 export * from './user-session.entity';
 export * from './page-view.entity';
+export * from './storage-snapshot.entity';
 export * from './referral.entity';
 export * from './posted-job.entity';
 export * from './consultation.entity';
@@ -55,6 +56,7 @@ import { SupportTicket } from './support-ticket.entity';
 import { SupportMessage } from './support-message.entity';
 import { UserSession } from './user-session.entity';
 import { PageView } from './page-view.entity';
+import { StorageSnapshot } from './storage-snapshot.entity';
 import { Referral } from './referral.entity';
 import { Notification } from './notification.entity';
 import { AccountFlag } from './account-flag.entity';
@@ -89,6 +91,7 @@ export const ALL_ENTITIES = [
   SupportMessage,
   UserSession,
   PageView,
+  StorageSnapshot,
   Referral,
   Notification,
   AccountFlag,

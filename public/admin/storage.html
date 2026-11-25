@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Super Admin · App storage</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#16181d; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --add:#16a34a; --sub:#dc2626; --warn:#d97706; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --card:#181b21; --text:#eceef2; --muted:#9aa3b2; --line:#2a2f38; --accent:#60a5fa; --add:#4ade80; --sub:#f87171; --warn:#fbbf24; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:20px; margin:0 0 4px; } p.sub { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  button { padding:8px 14px; border:0; border-radius:8px; font:inherit; font-weight:600; cursor:pointer; color:#fff; background:var(--accent); }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .tablewrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); }
+  th { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; white-space:nowrap; }
+  td.num { font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; }
+  .msg { padding:10px 12px; border-radius:8px; margin:12px 0 0; font-size:14px; background:rgba(220,38,38,.12); color:var(--sub); }
+  .hidden { display:none; } .small { font-size:12.5px; color:var(--muted); } .empty { color:var(--muted); padding:16px 8px; }
+  .big { font-size:34px; font-weight:800; letter-spacing:-.02em; }
+  .split { display:flex; height:14px; border-radius:99px; overflow:hidden; background:var(--line); margin:12px 0 8px; }
+  .split i { display:block; height:100%; } .split i.db { background:var(--accent); } .split i.fs { background:var(--add); }
+  .legend { display:flex; gap:18px; flex-wrap:wrap; font-size:13px; color:var(--muted); } .legend b { color:var(--text); }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; } .dot.db { background:var(--accent); } .dot.fs { background:var(--add); }
+  .bar { height:6px; border-radius:99px; background:var(--line); margin-top:6px; width:200px; max-width:100%; overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
+  .bar.limit { width:100%; height:10px; margin:10px 0 4px; } .bar.limit i.warn { background:var(--warn); } .bar.limit i.bad { background:var(--sub); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; } .grid .card { margin-bottom:0; }
+  .stats b { display:block; font-size:20px; } .stats span { color:var(--muted); font-size:13px; }
+  label.chk { display:inline-flex; gap:8px; align-items:center; color:var(--muted); font-size:14px; }
+  a.link { color:var(--accent); text-decoration:none; font-weight:600; }
+  tr.feat { cursor:pointer; } tr.feat:hover td { background:rgba(37,99,235,.06); }
+  tr.sub td { background:rgba(127,127,127,.06); font-size:13px; padding-top:7px; padding-bottom:7px; }
+  .caret { display:inline-block; width:14px; color:var(--muted); transition:transform .15s; } tr.open .caret { transform:rotate(90deg); }
+  .up { color:var(--warn); } .flat { color:var(--muted); } .down { color:var(--add); }
+  .stats { display:flex; gap:28px; flex-wrap:wrap; margin:10px 0 0; }
+  #chart { width:100%; height:170px; display:block; }
+  #chart .axis { stroke:var(--line); } #chart .lbl { fill:var(--muted); font-size:10px; }
+  .note { font-size:13px; color:var(--muted); } .note li { margin:4px 0; }
+  .pill { font-size:11px; padding:1px 7px; border-radius:99px; border:1px solid var(--line); color:var(--muted); margin-left:6px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div><h1>App storage</h1><p class="sub">How much space the whole app is using: the database and the files on the server</p></div>
+    <button id="back" class="ghost" type="button">&larr; Back</button>
+  </div>
+
+  <section id="nosession" class="card hidden">
+    <strong>Checking your super admin session…</strong>
+    <p class="sub" id="nsText" style="margin:6px 0 12px">One moment.</p>
+    <button id="nsBack" type="button">Back to the dashboard</button>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="card">
+      <div class="top">
+        <div><div class="small">Total used by the app</div><div class="big" id="total">—</div></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <label class="chk"><input type="checkbox" id="deep"> Include program files (slower)</label>
+          <button id="refresh" type="button">Refresh</button>
+        </div>
+      </div>
+      <div class="split" id="split"></div>
+      <div class="legend">
+        <span><i class="dot db"></i>Database <b id="lgDb">—</b></span>
+        <span><i class="dot fs"></i>Files on the server <b id="lgFs">—</b></span>
+      </div>
+      <div class="small" id="measured" style="margin-top:8px"></div>
+      <div id="msg"></div>
+    </div>
+
+    <div class="grid" style="margin-bottom:16px">
+      <div class="card" id="limitCard">
+        <strong>Database</strong>
+        <div class="big" style="font-size:26px;margin-top:6px" id="dbSize">—</div>
+        <div class="small" id="dbSplit"></div>
+        <div id="limitBox" class="hidden">
+          <div class="bar limit"><i id="limitBar"></i></div>
+          <div class="small" id="limitText"></div>
+        </div>
+        <div class="small" id="noLimit" style="margin-top:6px">Tip: set <code>DB_STORAGE_LIMIT_MB</code> on the server to your plan's limit (for example 500) to see how full it is.</div>
+      </div>
+      <div class="card" id="diskCard">
+        <strong>Server disk</strong>
+        <div id="diskBody" class="small" style="margin-top:6px">Not reported by this server.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <strong>Growth</strong>
+      <div class="stats" id="growthStats"></div>
+      <svg id="chart" viewBox="0 0 600 170" preserveAspectRatio="none" class="hidden"></svg>
+      <div id="chartLabels" class="small hidden" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"></div>
+      <div id="chartEmpty" class="small" style="margin-top:8px">The app takes a storage reading about every 6 hours, so a growth chart appears after a day or two. If it stays empty, run <code>npm run db:sync</code> once on the server.</div>
+    </div>
+
+    <div class="card tablewrap">
+      <div class="top"><strong>Database space by feature</strong><span class="small" id="featSummary"></span></div>
+      <p class="small" style="margin:4px 0 8px">Click a feature to see its tables. Sizes include the table's data, its indexes and large-value storage.</p>
+      <table><thead><tr><th>Feature</th><th>Size</th><th>Share of database</th><th>Rows (approx.)</th><th>Change in 7 days</th></tr></thead><tbody id="features"></tbody></table>
+    </div>
+
+    <div class="card tablewrap">
+      <strong>Biggest tables overall</strong>
+      <table style="margin-top:8px"><thead><tr><th>Table</th><th>Feature</th><th>Size</th><th>Data</th><th>Indexes</th><th>Other</th><th>~Rows</th><th>Avg per row</th></tr></thead><tbody id="tables"></tbody></table>
+    </div>
+
+    <div class="card tablewrap">
+      <strong>Files on the server</strong>
+      <table style="margin-top:8px"><thead><tr><th>Folder</th><th>Size</th><th>Files</th></tr></thead><tbody id="folders"></tbody></table>
+    </div>
+
+    <div class="card">
+      <strong>How to read this</strong>
+      <ul class="note">
+        <li><b>Total</b> = the database plus the folders the app writes to on the server. Dependencies (<code>node_modules</code>) only count if you tick the box above.</li>
+        <li><b>Deleted data does not shrink the database straight away.</b> The space is reused first and returned to the disk when the database cleans up. "Dead rows" under each table show how much is waiting to be cleaned.</li>
+        <li><b>Free space fast:</b> the biggest wins are usually <a class="link" href="/admin/activity.html">user activity</a> (clear old page views) and old generated documents.</li>
+        <li><b>System</b> is what the database holds besides your tables: internal catalogs and bookkeeping.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  var API = '/api/v1';
+  var jwt = null;
+  var $ = function (id) { return document.getElementById(id); };
+  function show(el, on) { el.classList.toggle('hidden', !on); }
+  function msg(text) { var el = $('msg'); el.textContent = ''; if (!text) return; var d = document.createElement('div'); d.className = 'msg'; d.textContent = text; el.appendChild(d); }
+
+  function goBack() {
+    var sameSite = false;
+    try { sameSite = document.referrer && new URL(document.referrer).origin === location.origin; } catch (e) {}
+    if (sameSite && history.length > 1) history.back(); else location.href = '/admin';
+  }
+  $('back').onclick = goBack; $('nsBack').onclick = goBack;
+
+  function api(path) {
+    return fetch(API + path, { headers: jwt ? { Authorization: 'Bearer ' + jwt } : {} }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (r.status === 401 && jwt) { noSession('Your session has expired. Go back to the dashboard and sign in again.'); }
+        if (!r.ok) { var m = data && data.message; throw new Error(Array.isArray(m) ? m.join(', ') : (m || 'Request failed (' + r.status + ')')); }
+        return data;
+      });
+    });
+  }
+
+  // ---- Reuse the dashboard's existing sign-in (same origin, so it shares the browser's storage). ----
+  var JWT_RE = /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/;
+  function pickJwt(value, depth) {
+    if (typeof value === 'string') {
+      if (JWT_RE.test(value)) return [value];
+      if (depth < 2 && /^[\[{]/.test(value.trim())) { try { return pickJwt(JSON.parse(value), depth + 1); } catch (e) {} }
+      return [];
+    }
+    if (value && typeof value === 'object' && depth < 4) {
+      var out = [];
+      Object.keys(value).forEach(function (k) { out = out.concat(pickJwt(value[k], depth + 1)); });
+      return out;
+    }
+    return [];
+  }
+  function candidateTokens() {
+    var found = [];
+    [window.localStorage, window.sessionStorage].forEach(function (st) {
+      try { for (var i = 0; i < st.length; i++) { found = found.concat(pickJwt(st.getItem(st.key(i)), 0)); } } catch (e) {}
+    });
+    return found.filter(function (t, i) { return found.indexOf(t) === i; });
+  }
+  function tryTokens(list) {
+    if (!list.length) return Promise.reject(new Error('none'));
+    jwt = list[0];
+    return fetch(API + '/dashboard/me', { headers: { Authorization: 'Bearer ' + jwt } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('bad')); })
+      .then(function (res) { if (res.user && res.user.role === 'SUPER_ADMIN') return; throw new Error('not super admin'); })
+      .catch(function () { jwt = null; return tryTokens(list.slice(1)); });
+  }
+  function noSession(text) {
+    jwt = null; show($('app'), false); show($('nosession'), true);
+    $('nsText').textContent = text || 'No super admin session was found. Go back to the dashboard, sign in there, then open App storage again.';
+  }
+
+  function fmtBytes(b) { if (!b) return '0 B'; if (b < 1024) return b + ' B'; if (b < 1048576) return (b / 1024).toFixed(1) + ' KB'; if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB'; return (b / 1073741824).toFixed(2) + ' GB'; }
+  function td(text, cls) { var c = document.createElement('td'); c.textContent = text; if (cls) c.className = cls; return c; }
+
+  function load(refresh) {
+    msg(''); $('refresh').disabled = true; $('refresh').textContent = 'Measuring…';
+    api('/admin/storage?' + ($('deep').checked ? 'deep=1&' : '') + (refresh ? 'refresh=1' : '')).then(render)
+      .catch(function (e) { msg(e.message); })
+      .then(function () { $('refresh').disabled = false; $('refresh').textContent = 'Refresh'; });
+  }
+
+  function render(d) {
+    $('total').textContent = fmtBytes(d.totalBytes);
+    var total = d.totalBytes || 1;
+    $('split').textContent = '';
+    [['db', d.database.bytes], ['fs', d.files.bytes]].forEach(function (p) { var i = document.createElement('i'); i.className = p[0]; i.style.width = (p[1] / total * 100) + '%'; $('split').appendChild(i); });
+    $('lgDb').textContent = fmtBytes(d.database.bytes); $('lgFs').textContent = fmtBytes(d.files.bytes);
+    $('measured').textContent = 'Measured ' + new Date(d.measuredAt).toLocaleString() + (d.deep ? ' · includes program files' : ' · program files (dependencies) not included');
+
+    $('dbSize').textContent = fmtBytes(d.database.bytes);
+    $('dbSplit').textContent = d.database.tableCount + ' tables use ' + fmtBytes(d.database.tablesBytes) + ' · system ' + fmtBytes(d.database.systemBytes) + (d.database.version ? ' · PostgreSQL ' + String(d.database.version).split(' ')[0] : '');
+    var hasLimit = d.database.limitBytes != null;
+    show($('limitBox'), hasLimit); show($('noLimit'), !hasLimit);
+    if (hasLimit) {
+      var pct = d.database.percentOfLimit;
+      var bar = $('limitBar'); bar.style.width = Math.min(100, pct) + '%'; bar.className = pct >= 90 ? 'bad' : pct >= 70 ? 'warn' : '';
+      $('limitText').textContent = pct + '% of ' + fmtBytes(d.database.limitBytes) + ' used · ' + fmtBytes(Math.max(0, d.database.limitBytes - d.database.bytes)) + ' left';
+    }
+
+    var disk = $('diskBody');
+    if (d.disk) {
+      disk.className = ''; disk.textContent = '';
+      var big = document.createElement('div'); big.className = 'big'; big.style.fontSize = '26px'; big.textContent = fmtBytes(d.disk.usedBytes) + ' used'; disk.appendChild(big);
+      var pc = d.disk.totalBytes ? Math.round(d.disk.usedBytes / d.disk.totalBytes * 100) : 0;
+      var b = document.createElement('div'); b.className = 'bar limit'; var bi = document.createElement('i'); bi.style.width = pc + '%'; bi.className = pc >= 90 ? 'bad' : pc >= 70 ? 'warn' : ''; b.appendChild(bi); disk.appendChild(b);
+      var t = document.createElement('div'); t.className = 'small'; t.textContent = fmtBytes(d.disk.freeBytes) + ' free of ' + fmtBytes(d.disk.totalBytes) + ' (the whole disk, not only this app)'; disk.appendChild(t);
+    } else { disk.className = 'small'; disk.textContent = 'Not reported by this server.'; }
+
+    renderFeatures(d);
+    renderGrowth(d);
+
+    var fb = $('folders'); fb.textContent = '';
+    d.files.folders.forEach(function (f) {
+      var tr = document.createElement('tr');
+      var c = document.createElement('td'); c.textContent = f.label + (f.exists ? '' : ' (not created yet)'); tr.appendChild(c);
+      tr.appendChild(td((f.partial ? '≥ ' : '') + fmtBytes(f.bytes), 'num')); tr.appendChild(td(f.files.toLocaleString(), 'num'));
+      fb.appendChild(tr);
+    });
+  }
+
+  function when(iso) { return iso ? new Date(iso).toLocaleDateString([], { dateStyle: 'medium' }) : 'never'; }
+  function signed(b) { return (b > 0 ? '+' : b < 0 ? '−' : '') + fmtBytes(Math.abs(b)); }
+  function changeCell(b) {
+    var c = document.createElement('td'); c.className = 'num';
+    if (b == null) { c.textContent = '—'; c.className += ' flat'; return c; }
+    c.textContent = b === 0 ? 'no change' : signed(b); c.className += b > 0 ? ' up' : b < 0 ? ' down' : ' flat'; return c;
+  }
+  function bar(pct) { var b = document.createElement('div'); b.className = 'bar'; var i = document.createElement('i'); i.style.width = Math.max(0, Math.min(100, pct)) + '%'; b.appendChild(i); return b; }
+
+  function renderFeatures(d) {
+    var db = d.database, fb = $('features'), flat = [];
+    fb.textContent = '';
+    $('featSummary').textContent = db.features.length + ' features · ' + db.tableCount + ' tables · ' + fmtBytes(db.tablesBytes) + ' in tables + ' + fmtBytes(db.systemBytes) + ' system';
+    var max = db.features.length ? db.features[0].bytes : 0;
+    db.features.forEach(function (f) {
+      var tr = document.createElement('tr'); tr.className = 'feat';
+      var c = document.createElement('td');
+      var name = document.createElement('div'); name.style.fontWeight = '600';
+      var caret = document.createElement('span'); caret.className = 'caret'; caret.textContent = '▸'; name.appendChild(caret); name.appendChild(document.createTextNode(f.label)); c.appendChild(name);
+      var desc = document.createElement('div'); desc.className = 'small'; desc.style.marginLeft = '14px'; desc.textContent = f.description; c.appendChild(desc);
+      tr.appendChild(c); tr.appendChild(td(fmtBytes(f.bytes), 'num'));
+      var sh = document.createElement('td'); sh.className = 'num'; sh.textContent = f.percentOfDatabase + '%'; sh.appendChild(bar(max ? f.bytes / max * 100 : 0)); tr.appendChild(sh);
+      tr.appendChild(td(f.approxRows.toLocaleString(), 'num')); tr.appendChild(changeCell(f.growth7dBytes));
+      fb.appendChild(tr);
+
+      var subs = [];
+      f.tables.forEach(function (t) {
+        flat.push({ t: t, feature: f.label });
+        var sr = document.createElement('tr'); sr.className = 'sub hidden';
+        var n = document.createElement('td'); n.style.paddingLeft = '28px';
+        var tn = document.createElement('div'); tn.style.fontWeight = '600'; tn.textContent = t.name; n.appendChild(tn);
+        var det = document.createElement('div'); det.className = 'small';
+        det.textContent = 'data ' + fmtBytes(t.dataBytes) + ' · indexes ' + fmtBytes(t.indexBytes) + (t.otherBytes ? ' · other ' + fmtBytes(t.otherBytes) : '') +
+          ' · avg ' + (t.avgRowBytes == null ? '—' : fmtBytes(t.avgRowBytes)) + '/row · ' + t.deadRows.toLocaleString() + ' dead rows · cleaned ' + when(t.lastVacuumAt);
+        n.appendChild(det); sr.appendChild(n);
+        sr.appendChild(td(fmtBytes(t.bytes), 'num'));
+        var s2 = document.createElement('td'); s2.className = 'num'; s2.textContent = f.bytes ? (t.bytes / f.bytes * 100).toFixed(0) + '% of feature' : ''; sr.appendChild(s2);
+        sr.appendChild(td(t.approxRows.toLocaleString(), 'num')); sr.appendChild(td('', ''));
+        fb.appendChild(sr); subs.push(sr);
+      });
+      tr.onclick = function () {
+        var open = tr.classList.toggle('open');
+        subs.forEach(function (r) { r.classList.toggle('hidden', !open); });
+      };
+    });
+
+    var tb = $('tables'); tb.textContent = '';
+    flat.sort(function (a, b) { return b.t.bytes - a.t.bytes; }).slice(0, 15).forEach(function (x) {
+      var t = x.t, tr = document.createElement('tr');
+      tr.appendChild(td(t.name, '')); tr.appendChild(td(x.feature, ''));
+      tr.appendChild(td(fmtBytes(t.bytes), 'num')); tr.appendChild(td(fmtBytes(t.dataBytes), 'num')); tr.appendChild(td(fmtBytes(t.indexBytes), 'num')); tr.appendChild(td(fmtBytes(t.otherBytes), 'num'));
+      tr.appendChild(td(t.approxRows.toLocaleString(), 'num')); tr.appendChild(td(t.avgRowBytes == null ? '—' : fmtBytes(t.avgRowBytes), 'num'));
+      tb.appendChild(tr);
+    });
+  }
+
+  function statBlock(value, label, cls) {
+    var d = document.createElement('div'); var b = document.createElement('b'); b.textContent = value; if (cls) b.className = cls; var s = document.createElement('span'); s.textContent = label; d.appendChild(b); d.appendChild(s); return d;
+  }
+  function renderGrowth(d) {
+    var h = d.history, stats = $('growthStats'); stats.textContent = '';
+    var svg = $('chart'); svg.textContent = ''; $('chartLabels').style.display = 'none';
+    var pts = h && h.points ? h.points : [];
+    if (h && h.growth) {
+      [['last7Days', 'last 7 days'], ['last30Days', 'last 30 days']].forEach(function (k) {
+        var g = h.growth[k[0]];
+        if (g) stats.appendChild(statBlock(signed(g.totalBytes), 'total, ' + k[1] + (g.coveredDays < g.windowDays ? ' (over ' + g.coveredDays + ' days of readings)' : ''), g.totalBytes > 0 ? 'up' : ''));
+      });
+      var g7 = h.growth.last7Days || h.growth.last30Days;
+      if (g7) stats.appendChild(statBlock('~' + fmtBytes(Math.max(0, g7.perDayTotalBytes)) + ' / day', 'average growth'));
+    }
+    if (h && h.projection) stats.appendChild(statBlock('~' + h.projection.daysUntilFull + ' days', 'until the database reaches your limit at this pace', h.projection.daysUntilFull < 30 ? 'up' : ''));
+    if (!stats.childNodes.length) { var n = document.createElement('div'); n.className = 'small'; n.textContent = 'Not enough readings yet to measure growth.'; stats.appendChild(n); }
+
+    var ok = pts.length >= 2;
+    svg.classList.toggle('hidden', !ok); show($('chartEmpty'), !ok);
+    if (!ok) return;
+    var NS = 'http://www.w3.org/2000/svg', W = 600, H = 170, padL = 6, padR = 6, padT = 14, padB = 22;
+    var t0 = new Date(pts[0].at).getTime(), t1 = new Date(pts[pts.length - 1].at).getTime() || t0 + 1;
+    var min = Math.min.apply(null, pts.map(function (p) { return p.totalBytes; })), max = Math.max.apply(null, pts.map(function (p) { return p.totalBytes; }));
+    if (max === min) { max = min + 1; }
+    function X(t) { return padL + (t1 === t0 ? 0 : (t - t0) / (t1 - t0)) * (W - padL - padR); }
+    function Y(v) { return H - padB - (v - min) / (max - min) * (H - padT - padB); }
+    function el(name, attrs) { var e = document.createElementNS(NS, name); Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); }); return e; }
+    function line(key, color) {
+      var dstr = pts.map(function (p, i) { return (i ? 'L' : 'M') + X(new Date(p.at).getTime()).toFixed(1) + ' ' + Y(p[key]).toFixed(1); }).join(' ');
+      svg.appendChild(el('path', { d: dstr, fill: 'none', stroke: color, 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' }));
+    }
+    svg.appendChild(el('line', { x1: padL, y1: H - padB, x2: W - padR, y2: H - padB, 'class': 'axis' }));
+    var lab = $('chartLabels'); lab.textContent = '';
+    [new Date(t0).toLocaleDateString(), 'Lowest ' + fmtBytes(min) + ' · highest ' + fmtBytes(max), new Date(t1).toLocaleDateString()].forEach(function (t) { var sp = document.createElement('span'); sp.textContent = t; lab.appendChild(sp); });
+    lab.classList.remove('hidden'); lab.style.display = 'flex';
+    line('totalBytes', 'var(--accent)');
+  }
+
+  $('refresh').onclick = function () { load(true); };
+  $('deep').onchange = function () { load(true); };
+
+  function enterApp() { show($('nosession'), false); show($('app'), true); load(false); }
+  show($('nosession'), true);
+  tryTokens(candidateTokens()).then(enterApp).catch(function () { noSession(); });
+})();
+</script>
+</body>
+</html>

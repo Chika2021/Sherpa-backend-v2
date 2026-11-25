@@ -132,6 +132,7 @@ nav .cdbtn:hover{background:var(--brand2)}
       <button data-tab="system" data-roles="SUPER_ADMIN">App info</button>
       <button type="button" data-roles="SUPER_ADMIN" id="tokenManagement">Token management</button>
       <button type="button" data-roles="SUPER_ADMIN" id="userActivity">User activity</button>
+      <button type="button" data-roles="SUPER_ADMIN" id="appStorage">App storage</button>
       <button class="cdbtn" id="openCountdown" title="Full-screen live user count"><span class="dot on"></span>Countdown</button>
     </nav>
     <span class="muted" id="who"></span>
@@ -254,6 +255,7 @@ function logout() { CD.close(true); token = null; me = null; sessionStorage.remo
 $('#logout').onclick = logout;
 $('#tokenManagement').onclick = () => { location.href = '/admin/tokens.html'; };
 $('#userActivity').onclick = () => { location.href = '/admin/activity.html'; };
+$('#appStorage').onclick = () => { location.href = '/admin/storage.html'; };
 $('#togglePassword').onclick = () => {
   const isVisible = $('#password').type === 'text';
   $('#password').type = isVisible ? 'password' : 'text';
