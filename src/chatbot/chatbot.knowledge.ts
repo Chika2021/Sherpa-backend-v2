@@ -18,7 +18,7 @@ export const KNOWLEDGE: KnowledgeTopic[] = [
   {
     id: 'getting-started',
     title: 'Getting started',
-    keywords: ['start', 'begin', 'how does it work', 'what is', 'what can', 'features', 'overview', 'sign up', 'register', 'create account', 'new here'],
+    keywords: ['start', 'begin', 'how does it work', 'features', 'overview', 'sign up', 'register', 'create account', 'new here'],
     answer:
       'Sherpha helps you land a job: upload your resume, find matching jobs, generate a tailored resume and cover letter for each one, apply (assisted or automatic), and practise interviews. Create a free account to begin - new accounts get free tokens to try the AI features.',
     path: '/register',

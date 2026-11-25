@@ -535,11 +535,12 @@ export class GeminiService implements OnModuleInit {
   private async callModel(
     model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>,
     prompt: string | Part[],
-    billing: { userId: string; label: string; skipCharge?: boolean; noFallback?: boolean },
+    billing: { userId: string; label: string; skipCharge?: boolean; noFallback?: boolean; free?: boolean },
     cerebrasMaxTokens?: number,
     opts?: { timeoutMs?: number },
   ): Promise<string> {
-    await this.tokens.assertCanAfford(billing.userId, billing.label);
+    // `free` is for calls made on behalf of nobody in particular (the public chatbot): no wallet to check or charge.
+    if (!billing.free) await this.tokens.assertCanAfford(billing.userId, billing.label);
 
     const timeoutMs = opts?.timeoutMs ?? 45_000;
     // Cerebras can only take over for text prompts (no audio/image parts) and only when configured and allowed.
@@ -725,7 +726,7 @@ export class GeminiService implements OnModuleInit {
    */
   private async fallbackToCerebras(
     prompt: string | Part[],
-    billing: { userId: string; label: string; skipCharge?: boolean; noFallback?: boolean },
+    billing: { userId: string; label: string; skipCharge?: boolean; noFallback?: boolean; free?: boolean },
     originalError: HttpException,
     maxTokens?: number,
     timeoutMs?: number,
@@ -2456,6 +2457,21 @@ Use plain ASCII punctuation only (no emoji, no arrows or special symbols).`;
     }
     await this.chargeForUsage(billing, undefined);
     return lessons;
+  }
+
+  // ---- Public chatbot ----
+  /**
+   * Plain-text answer for the PUBLIC chatbot (visitors may not even have an account), so it is not billed to anyone.
+   * Same model hopping, quota handling, retries and Cerebras fallback as every other call - it just skips the wallet.
+   * The caller supplies the whole prompt (instructions + conversation + question) and is responsible for abuse limits.
+   */
+  async answerChatbot(prompt: string, opts: { maxTokens?: number; timeoutMs?: number } = {}): Promise<string> {
+    const maxTokens = opts.maxTokens ?? 600;
+    const model = this.client.getGenerativeModel({
+      model: this.modelName,
+      generationConfig: { temperature: 0.6, maxOutputTokens: maxTokens },
+    });
+    return this.callModel(model, prompt, { userId: '', label: 'chatbot', skipCharge: true, free: true }, maxTokens, { timeoutMs: opts.timeoutMs ?? 20_000 });
   }
 
   // ---- Tutorial videos ----
